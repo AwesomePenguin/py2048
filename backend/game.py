@@ -2,34 +2,22 @@
 Core module for the 2048 game logic
 '''
 
+import copy
 import random
 from typing import Optional
+import json
 
 class Game:
-    def __init__(self, config: Optional[dict] = None):
+    def __init__(self, config: Optional[dict] = None, test_mode: bool = False):
         '''
         Initialize the game state
         If no config is provided, use default settings
         '''
         # Initialize config first
         self.config = config or {}
-        
-        # configurable parameters (set before board initialization)
-        self.size_x = self.config.get('size_x', 4)
-        self.size_y = self.config.get('size_y', 4)
-        self.win_value = self.config.get('win_value', 2048)
-        
-        # Initialize board with correct dimensions
-        self.board = [[0] * self.size_x for _ in range(self.size_y)]
-        self.score = 0
-        self.streak = 0
-        self.streak_multiplier = 1
-        self.over = False
-        self.won = False
-        self.history = []  # to store previous states
-        self.display_message = ""
+        self.test_mode = test_mode  # If true, suppress random elements for testing
 
-        # configurable parameters
+        # configurable parameters (set before board initialization)
         self.size_x = self.config.get('size_x', 4)
         self.size_y = self.config.get('size_y', 4)
         self.win_value = self.config.get('win_value', 2048)
@@ -39,25 +27,143 @@ class Game:
         self.max_redo = self.config.get('max_redo', 3)  # max number of redo allowed, 0 means no redo, -1 means infinite
         
         # advanced settings
-        # merge strateg is one of 'standard', 'reverse'
-        # 'standard': prioririze merging cells away from the direction, i.e. [2,2,2] -> left -> [2,4,0]
-        # 'reverse': prioririze merging cells towards the direction, i.e. [2,2,2] -> left -> [4,2,0]
+        # merge strategy is one of 'standard', 'reverse'
+        # 'standard': prioritize merging cells away from the direction, i.e. [2,2,2] -> left -> [2,4,0]
+        # 'reverse': prioritize merging cells towards the direction, i.e. [2,2,2] -> left -> [4,2,0]
         self.merge_strategy = self.config.get('merge_strategy', 'standard')
         self.allow_secondary_merge = self.config.get('allow_secondary_merge', False) # allow multiple merges in one move, e.g. [2,2,2,2] -> left -> [8,0,0,0]
         self.use_streak = self.config.get('use_streak', False) # whether to use streak system
         self.streak_bonus_percent = self.config.get('streak_bonus_percent', 10) # percentage bonus per streak level (default 10%)
         self.number_of_hints = self.config.get('number_of_hints', 3) # number of AI hint that can be requested per game
-        
-        # Additional state tracking
-        self.hints_used = 0  # track how many hints have been used
-        self.redos_used = 0  # track how many redos have been used
-        self.moves_count = 0  # track total moves made
 
         # set output mode: 'console' or 'web'
         self.output_mode = self.config.get('output_mode', 'console')
 
+        # non-configurable parameters
+        self.valid_commands = ['up', 'down', 'left', 'right', 'redo', 'hint', 'exit', 'restart']
+        self.command_descriptions = {
+            'up': 'Move tiles up',
+            'down': 'Move tiles down',
+            'left': 'Move tiles left',
+            'right': 'Move tiles right',
+            'redo': 'Redo last action',
+            'hint': 'Get a hint',
+            'exit': 'Exit the game',
+            'restart': 'Restart the game'
+        }
+
+        # Initialize game state dictionary - this will be the single source of truth
+        self.state = {
+            'board': [[0] * self.size_x for _ in range(self.size_y)],
+            'score': 0,
+            'streak': 0,
+            'streak_multiplier': 1,
+            'over': False,
+            'won': False,
+            'display_message': "",
+            'moves_count': 0
+        }
+        
+        # Session-persistent counters (not part of state that gets saved/restored)
+        self.hints_used = 0
+        self.redos_used = 0
+        
+        # History to store previous states (list of state dictionaries)
+        self.history = []
+
         # Initialize the game
         self.init_game()
+
+    # Property accessors for seamless state management
+    @property
+    def board(self):
+        return self.state['board']
+    
+    @board.setter
+    def board(self, value):
+        self.state['board'] = value
+    
+    @property
+    def score(self):
+        return self.state['score']
+    
+    @score.setter
+    def score(self, value):
+        self.state['score'] = value
+    
+    @property
+    def streak(self):
+        return self.state['streak']
+    
+    @streak.setter
+    def streak(self, value):
+        self.state['streak'] = value
+    
+    @property
+    def over(self):
+        return self.state['over']
+    
+    @over.setter
+    def over(self, value):
+        self.state['over'] = value
+    
+    @property
+    def won(self):
+        return self.state['won']
+    
+    @won.setter
+    def won(self, value):
+        self.state['won'] = value
+    
+    @property
+    def display_message(self):
+        return self.state['display_message']
+    
+    @display_message.setter
+    def display_message(self, value):
+        self.state['display_message'] = value
+    
+    @property
+    def moves_count(self):
+        return self.state['moves_count']
+    
+    @moves_count.setter
+    def moves_count(self, value):
+        self.state['moves_count'] = value
+
+    def get_state_copy(self):
+        '''
+        Get a deep copy of the current state for history storage
+        '''
+        return {
+            'board': copy.deepcopy(self.state['board']),  # Deep copy of board
+            'score': self.state['score'],
+            'streak': self.state['streak'],
+            'streak_multiplier': self.state['streak_multiplier'],
+            'over': self.state['over'],
+            'won': self.state['won'],
+            'display_message': self.state['display_message'],
+            'moves_count': self.state['moves_count']
+        }
+    
+    def restore_state(self, saved_state):
+        '''
+        Restore game state from a saved state dictionary
+        '''
+        self.state['board'] = [row[:] for row in saved_state['board']]  # Deep copy
+        self.state['score'] = saved_state['score']
+        self.state['streak'] = saved_state['streak']
+        self.state['streak_multiplier'] = saved_state['streak_multiplier']
+        self.state['over'] = saved_state['over']
+        self.state['won'] = saved_state['won']
+        self.state['display_message'] = saved_state['display_message']
+        self.state['moves_count'] = saved_state['moves_count']
+    
+    def save_state_to_history(self):
+        '''
+        Save current state to history before making a move
+        '''
+        self.history.append(self.get_state_copy())
 
     def validate_config(self):
         '''
@@ -76,16 +182,18 @@ class Game:
             raise ValueError("win_value must be between 4 and 10000")
         
         # check initial tiles constraints
-        if not (1 <= self.initial_tiles <= self.size_x * self.size_y // 2):
-            raise ValueError("initial_tiles must be at least 1 and at most half of the board size")
+        if not self.test_mode: # Skip this check in test mode
+            if not (1 <= self.initial_tiles <= self.size_x * self.size_y // 2):
+                raise ValueError("initial_tiles must be at least 1 and at most half of the board size")
         
         # check new tile values constraints
         if not all(v in range(1, 11) for v in self.new_tile_values):
             raise ValueError("new_tile_values must be between 1 and 10")
         if len(self.new_tile_values) == 0:
             raise ValueError("new_tile_values must contain at least one value")
-        if not (1 <= self.random_new_tiles <= self.size_x * self.size_y // 2):
-            raise ValueError("random_new_tiles must be at least 1 and at most half of the board size")   
+        if not self.test_mode: # Skip this check in test mode
+            if not (1 <= self.random_new_tiles <= self.size_x * self.size_y // 2):
+                raise ValueError("random_new_tiles must be at least 1 and at most half of the board size")   
         
         # check max_redo constraints
         if not (self.max_redo >= -1):
@@ -109,38 +217,621 @@ class Game:
         Initialize the game board and add initial tiles
         '''
         # Validate configuration before starting
+
         self.validate_config()
         
-        # Clear the board
-        self.board = [[0] * self.size_x for _ in range(self.size_y)]
+        # Reset all state values
+        self.state['board'] = [[0] * self.size_x for _ in range(self.size_y)]
+        self.state['score'] = 0
+        self.state['streak'] = 0
+        self.state['streak_multiplier'] = 1
+        self.state['over'] = False
+        self.state['won'] = False
+        self.state['display_message'] = "Game started!"
+        self.state['moves_count'] = 0
+        
+        # Reset session-persistent counters
+        self.hints_used = 0
+        self.redos_used = 0
+        
+        # Clear history
+        self.history = []
         
         # Add initial tiles
         for _ in range(self.initial_tiles):
             self.add_random_tile()
         
-        # Reset game state
-        self.score = 0
-        self.streak = 0
-        self.over = False
-        self.won = False
-        self.history = []
-        self.hints_used = 0
-        self.redos_used = 0
-        self.moves_count = 0
-        self.display_message = "Game started!"
+        # Save initial state to history
+        self.save_state_to_history()
     
     def add_random_tile(self):
         '''
         Add a random tile to an empty cell on the board
         '''
-        empty_cells = []
+        empty_cells = [(y, x) for y in range(self.size_y) for x in range(self.size_x) if self.board[y][x] == 0]
+        if not empty_cells:
+            return False  # No empty cells available
+        y, x = random.choice(empty_cells)
+        self.board[y][x] = random.choice(self.new_tile_values)
+        return True
+    
+    def get_display_data(self):
+        '''
+        Get all data needed for display in a structured format
+        This method prepares data for both console and web output
+        '''
+        return {
+            'board': self.board,
+            'score': self.score,
+            'streak': self.streak,
+            'streak_multiplier': self.state['streak_multiplier'],
+            'moves_count': self.moves_count,
+            'hints_used': self.hints_used,
+            'redos_used': self.redos_used,
+            'redos_remaining': max(0, self.max_redo - self.redos_used) if self.max_redo != -1 else -1,
+            'hints_remaining': max(0, self.number_of_hints - self.hints_used),
+            'game_over': self.over,
+            'game_won': self.won,
+            'display_message': self.display_message,
+            'board_size': {'width': self.size_x, 'height': self.size_y},
+            'win_value': self.win_value,
+            'streak_enabled': self.use_streak
+        }
+    
+    def render_console(self):
+        '''
+        Render the game state for console output
+        '''
+        data = self.get_display_data()
+        
+        # Display message if any
+        if data['display_message']:
+            print(f"\n{data['display_message']}")
+        
+        # Display the board
+        print("\n" + "="*50)
+        for row in data['board']:
+            print("│ " + " │ ".join(str(val).rjust(4) if val != 0 else "    " for val in row) + " │")
+        print("="*50)
+        
+        # Display game statistics
+        print(f"Score: {data['score']:<8} Moves: {data['moves_count']:<4}", end="")
+        if data['streak_enabled']:
+            print(f" Streak: {data['streak']:<3} (×{data['streak_multiplier']:.1f})", end="")
+        print()
+        
+        # Display remaining resources
+        redos_text = f"{data['redos_remaining']}" if data['redos_remaining'] != -1 else "∞"
+        print(f"Hints: {data['hints_remaining']}/{self.number_of_hints}  Redos: {redos_text}")
+        
+        # Display game status
+        if data['game_won']:
+            print("🎉 CONGRATULATIONS! YOU WON! 🎉")
+        elif data['game_over']:
+            print("💀 GAME OVER! No more valid moves!")
+        
+        print()  # Extra spacing
+    
+    def get_json_response(self):
+        '''
+        Get game state as JSON for web API responses
+        '''
+        data = self.get_display_data()
+        
+        # Add additional metadata for web client
+        web_data = {
+            **data,
+            'config': {
+                'board_size': {'width': self.size_x, 'height': self.size_y},
+                'win_value': self.win_value,
+                'max_redos': self.max_redo,
+                'max_hints': self.number_of_hints,
+                'streak_enabled': self.use_streak,
+                'streak_bonus_percent': self.streak_bonus_percent,
+                'merge_strategy': self.merge_strategy,
+                'allow_secondary_merge': self.allow_secondary_merge
+            },
+            'available_commands': self.valid_commands,
+            'timestamp': __import__('datetime').datetime.now().isoformat()
+        }
+        
+        return json.dumps(web_data, indent=2)
+    
+    def print_board(self):
+        '''
+        Display the game state according to the output mode
+        '''
+        if self.output_mode == 'console':
+            self.render_console()
+        elif self.output_mode == 'web':
+            # For web mode, just return the JSON data
+            # The actual HTTP response will be handled by the API layer
+            return self.get_json_response()
+        else:
+            raise ValueError(f"Unknown output mode: {self.output_mode}")
+        
+        # Clear display message after showing it
+        self.display_message = ""
+    
+    def get_api_state(self):
+        '''
+        Get a clean state dictionary for API responses
+        Optimized for frontend consumption
+        '''
+        return {
+            'game_state': {
+                'board': self.board,
+                'score': self.score,
+                'streak': self.streak,
+                'moves': self.moves_count,
+                'status': {
+                    'game_over': self.over,
+                    'game_won': self.won,
+                    'in_progress': not (self.over or self.won)
+                }
+            },
+            'resources': {
+                'hints': {
+                    'used': self.hints_used,
+                    'remaining': max(0, self.number_of_hints - self.hints_used),
+                    'total': self.number_of_hints
+                },
+                'redos': {
+                    'used': self.redos_used,
+                    'remaining': max(0, self.max_redo - self.redos_used) if self.max_redo != -1 else -1,
+                    'total': self.max_redo
+                }
+            },
+            'config': {
+                'board_size': [self.size_x, self.size_y],
+                'win_target': self.win_value,
+                'streak_enabled': self.use_streak,
+                'streak_multiplier': self.state['streak_multiplier']
+            },
+            'message': self.display_message,
+            'last_updated': __import__('datetime').datetime.now().isoformat()
+        }
+    
+    def set_output_mode(self, mode: str):
+        '''
+        Change the output mode (console/web)
+        '''
+        if mode not in ['console', 'web']:
+            raise ValueError("Output mode must be 'console' or 'web'")
+        self.output_mode = mode
+    
+    def display(self, message: str = ""):
+        '''
+        Universal display method that works for both console and web
+        '''
+        if message:
+            self.display_message = message
+        
+        if self.output_mode == 'console':
+            self.render_console()
+        # For web mode, the message will be included in the next API response
+        
+        return self.get_api_state() if self.output_mode == 'web' else None
+
+    def check_game_over(self):
+        '''
+        Check if the game is over (no valid moves left)
+        '''
         for y in range(self.size_y):
             for x in range(self.size_x):
                 if self.board[y][x] == 0:
-                    empty_cells.append((y, x))
-        
-        if empty_cells:
-            y, x = random.choice(empty_cells)
-            self.board[y][x] = random.choice(self.new_tile_values)
-            return True
+                    return False  # Found an empty cell
+                if x < self.size_x - 1 and self.board[y][x] == self.board[y][x + 1]:
+                    return False  # Found a horizontal merge
+                if y < self.size_y - 1 and self.board[y][x] == self.board[y + 1][x]:
+                    return False  # Found a vertical merge
+        self.over = True
+        return True
+    
+    def check_win(self):
+        '''
+        Check if the player has won the game
+        '''
+        for row in self.board:
+            if any(val >= self.win_value for val in row):
+                self.won = True
+                return True
         return False
+    
+    def handle_redo(self):
+        '''
+        Method to handle redo action
+        '''
+        # Check if redo is disabled
+        if self.max_redo == 0:
+            self.display_message = "Redo is disabled!"
+            return False
+        
+        # Check if redo limit reached
+        if self.redos_used >= self.max_redo and self.max_redo != -1:
+            self.display_message = "No redos left!"
+            return False
+        
+        # Check if there's history to redo to
+        if len(self.history) <= 1:  # Need at least initial state + one move
+            self.display_message = "No moves to redo!"
+            return False
+        
+        # Remove current state from history and restore previous state
+        self.history.pop()  # Remove current state
+        if self.history:
+            previous_state = self.history[-1]  # Get previous state (but keep it in history)
+            self.restore_state(previous_state)
+            
+            # Increment session-persistent redo counter
+            self.redos_used += 1
+
+            self.display_message = f"Move undone! Redos used: {self.redos_used}/{self.max_redo if self.max_redo != -1 else '∞'}"
+            return True
+        
+        return False
+    
+    def handle_hint(self):
+        '''
+        Method to handle hint action
+        '''
+        # Check if hints are available
+        if self.hints_used >= self.number_of_hints:
+            self.display_message = "No hints left!"
+            return False
+        
+        # Placeholder for hint logic - to be implemented
+        self.hints_used += 1
+        self.display_message = f"Hint used! Hints left: {self.number_of_hints - self.hints_used}"
+        return True
+
+    def handle_move(self, direction: str):
+        '''
+        Handle a move in the specified direction
+        '''
+        if direction not in ['up', 'down', 'left', 'right']:
+            self.display_message = "Invalid direction!"
+            return False
+        
+        # Store original board to check if move was valid
+        original_board = [row[:] for row in self.board]
+        
+        # Execute the move
+        points_earned, merge_occurred = self._execute_move(direction)
+        
+        # Check if board actually changed
+        if self.board == original_board:
+            self.display_message = "Invalid move! No tiles can move in that direction."
+            return False
+        
+        # Valid move occurred - apply all changes
+        self.moves_count += 1
+        self.score += points_earned
+        
+        # Handle streak system
+        if self.use_streak:
+            if merge_occurred:
+                self.streak += 1
+                # Apply streak bonus to points earned
+                streak_bonus = int(points_earned * (self.streak_bonus_percent / 100) * self.streak)
+                self.score += streak_bonus
+                self.state['streak_multiplier'] = 1 + (self.streak * self.streak_bonus_percent / 100)
+                self.display_message = f"Move successful! Streak: {self.streak} (+{streak_bonus} bonus points)"
+            else:
+                # Move without merge breaks streak
+                self.streak = 0
+                self.state['streak_multiplier'] = 1
+                self.display_message = "Move successful! (no merges, streak reset)"
+        else:
+            self.display_message = "Move successful!"
+        
+        # Add random tiles after successful move
+        tiles_added = 0
+        for _ in range(self.random_new_tiles):
+            if self.add_random_tile():
+                tiles_added += 1
+            else:
+                break  # Board is full
+
+        # Save the state after the move is complete for future redo
+        self.save_state_to_history()
+        
+        return True
+    
+    def _execute_move(self, direction: str):
+        '''
+        Execute the move logic and return points earned and merge status
+        '''
+        points_earned = 0
+        merge_occurred = False
+        
+        if direction == 'left':
+            points_earned, merge_occurred = self._move_left()
+        elif direction == 'right':
+            points_earned, merge_occurred = self._move_right()
+        elif direction == 'up':
+            points_earned, merge_occurred = self._move_up()
+        elif direction == 'down':
+            points_earned, merge_occurred = self._move_down()
+        
+        return points_earned, merge_occurred
+    
+    def _move_left(self):
+        '''Move all tiles left and handle merging'''
+        points_earned = 0
+        merge_occurred = False
+        
+        for row_idx in range(self.size_y):
+            row = self.board[row_idx]
+            new_row, row_points, row_merged = self._process_line(row)
+            self.board[row_idx] = new_row
+            points_earned += row_points
+            if row_merged:
+                merge_occurred = True
+        
+        return points_earned, merge_occurred
+    
+    def _move_right(self):
+        '''Move all tiles right and handle merging'''
+        points_earned = 0
+        merge_occurred = False
+        
+        for row_idx in range(self.size_y):
+            row = self.board[row_idx]
+            # Reverse, process, then reverse back for right movement
+            reversed_row = row[::-1]
+            new_row, row_points, row_merged = self._process_line(reversed_row)
+            self.board[row_idx] = new_row[::-1]
+            points_earned += row_points
+            if row_merged:
+                merge_occurred = True
+        
+        return points_earned, merge_occurred
+    
+    def _move_up(self):
+        '''Move all tiles up and handle merging'''
+        points_earned = 0
+        merge_occurred = False
+        
+        for col_idx in range(self.size_x):
+            # Extract column
+            column = [self.board[row_idx][col_idx] for row_idx in range(self.size_y)]
+            new_column, col_points, col_merged = self._process_line(column)
+            # Put column back
+            for row_idx in range(self.size_y):
+                self.board[row_idx][col_idx] = new_column[row_idx]
+            points_earned += col_points
+            if col_merged:
+                merge_occurred = True
+        
+        return points_earned, merge_occurred
+    
+    def _move_down(self):
+        '''Move all tiles down and handle merging'''
+        points_earned = 0
+        merge_occurred = False
+        
+        for col_idx in range(self.size_x):
+            # Extract column
+            column = [self.board[row_idx][col_idx] for row_idx in range(self.size_y)]
+            # Reverse, process, then reverse back for down movement
+            reversed_column = column[::-1]
+            new_column, col_points, col_merged = self._process_line(reversed_column)
+            new_column = new_column[::-1]
+            # Put column back
+            for row_idx in range(self.size_y):
+                self.board[row_idx][col_idx] = new_column[row_idx]
+            points_earned += col_points
+            if col_merged:
+                merge_occurred = True
+        
+        return points_earned, merge_occurred
+    
+    def _process_line(self, line):
+        '''
+        Process a single line (row or column) for movement and merging
+        Returns: (new_line, points_earned, merge_occurred)
+        '''
+        # Remove zeros (compress line)
+        non_zero = [x for x in line if x != 0]
+        
+        if len(non_zero) == 0:
+            return line, 0, False  # No tiles to move
+        
+        points_earned = 0
+        merge_occurred = False
+        result = []
+        
+        # Apply merge strategy based on configuration
+        if self.merge_strategy == 'standard':
+            result, points_earned, merge_occurred = self._merge_standard(non_zero)
+        elif self.merge_strategy == 'reverse':
+            result, points_earned, merge_occurred = self._merge_reverse(non_zero)
+        else:
+            # Default to standard if unknown strategy
+            result, points_earned, merge_occurred = self._merge_standard(non_zero)
+        
+        # Pad with zeros to original length
+        while len(result) < len(line):
+            result.append(0)
+        
+        return result, points_earned, merge_occurred
+    
+    def _merge_reverse(self, tiles):
+        '''
+        Reverse merge strategy: merge tiles towards direction
+        Example: [2,2,2] -> [4,2,0] (first two 2s merge, towards movement direction)
+        This processes from left to right, prioritizing merges towards the movement direction
+        '''
+        if len(tiles) == 0:
+            return [], 0, False
+        
+        result = []
+        points_earned = 0
+        merge_occurred = False
+        i = 0
+        
+        while i < len(tiles):
+            if i + 1 < len(tiles) and tiles[i] == tiles[i + 1]:
+                # Merge these two tiles
+                merged_value = tiles[i] + tiles[i + 1]
+                result.append(merged_value)
+                points_earned += merged_value
+                merge_occurred = True
+                i += 2  # Skip both merged tiles
+                # Continue processing remaining tiles for independent merges
+            else:
+                # No merge possible, just move the tile
+                result.append(tiles[i])
+                i += 1
+        
+        # Handle secondary merge (whether merged tiles can merge again in same move)
+        # Only applies when allow_secondary_merge is True
+        if self.allow_secondary_merge and merge_occurred and len(result) > 1:
+            # Recursively apply reverse merging
+            secondary_result, secondary_points, secondary_merged = self._merge_reverse(result)
+            if secondary_merged:
+                return secondary_result, points_earned + secondary_points, True
+        
+        return result, points_earned, merge_occurred
+    
+    def _merge_standard(self, tiles):
+        '''
+        Standard merge strategy: merge tiles away from direction
+        Example: [2,2,2] -> [2,4,0] (last two 2s merge, away from movement direction)
+        This processes from right to left, prioritizing merges away from the movement direction
+        '''
+        if len(tiles) == 0:
+            return [], 0, False
+        
+        result = []
+        points_earned = 0
+        merge_occurred = False
+        i = len(tiles) - 1  # Start from the end
+        
+        while i >= 0:
+            if i - 1 >= 0 and tiles[i] == tiles[i - 1]:
+                # Merge these two tiles (current and previous)
+                merged_value = tiles[i] + tiles[i - 1]
+                result.insert(0, merged_value)  # Insert at beginning
+                points_earned += merged_value
+                merge_occurred = True
+                i -= 2  # Skip both merged tiles
+                # Continue processing remaining tiles for independent merges
+            else:
+                # No merge possible, just move the tile
+                result.insert(0, tiles[i])  # Insert at beginning
+                i -= 1
+        
+        # Handle secondary merge (whether merged tiles can merge again in same move)
+        # Only applies when allow_secondary_merge is True
+        if self.allow_secondary_merge and merge_occurred and len(result) > 1:
+            # Recursively apply standard merging
+            secondary_result, secondary_points, secondary_merged = self._merge_standard(result)
+            if secondary_merged:
+                return secondary_result, points_earned + secondary_points, True
+        
+        return result, points_earned, merge_occurred
+
+    def run_game(self):
+        '''
+        Run the game loop for console mode
+        '''
+        while True:
+            # First, check for win or game over
+            if self.check_win():
+                self.display("Congratulations! You've reached the target tile!")
+                break
+            if self.check_game_over():
+                self.display("No more valid moves! Game Over!")
+                break
+                
+            # Display current game state
+            self.display()
+            
+            # Get user input (only for console mode)
+            if self.output_mode == 'console':
+                command = input("Enter command (up, down, left, right, redo, hint, exit, restart): ").strip().lower()
+                if command not in self.valid_commands:
+                    self.display_message = "Invalid command! Please try again."
+                    continue
+                if command == 'exit':
+                    print("Exiting game. Goodbye!")
+                    break
+                if command == 'restart':
+                    print("Restarting game...")
+                    self.init_game()
+                    continue
+                if command == 'redo':
+                    self.handle_redo()
+                elif command == 'hint':
+                    self.handle_hint()
+                elif command in ['up', 'down', 'left', 'right']:
+                    self.handle_move(command)
+            else:
+                # For web mode, break the loop as this should be handled by API calls
+                break
+
+    def process_command(self, command: str) -> dict:
+        """
+        Process a command and return the result for web API use
+        This method is designed for stateless web API calls
+        """
+        if command not in self.valid_commands:
+            return {
+                'success': False,
+                'error': 'Invalid command',
+                'valid_commands': self.valid_commands,
+                'state': self.get_api_state()
+            }
+        
+        success = True
+        error_message = None
+        
+        try:
+            if command == 'redo':
+                success = self.handle_redo()
+                if not success:
+                    error_message = self.display_message
+            elif command == 'hint':
+                success = self.handle_hint()
+                if not success:
+                    error_message = self.display_message
+            elif command in ['up', 'down', 'left', 'right']:
+                success = self.handle_move(command)
+                if not success:
+                    error_message = self.display_message
+            elif command == 'restart':
+                self.init_game()
+                success = True
+            else:
+                success = False
+                error_message = f"Command '{command}' not implemented for web mode"
+                
+        except Exception as e:
+            success = False
+            error_message = str(e)
+        
+        # Check for game end conditions after processing command
+        game_ended = False
+        if command in ['up', 'down', 'left', 'right']:
+            # Check game end conditions after any move attempt (successful or not)
+            if self.check_win():
+                self.display_message = "Congratulations! You've reached the target tile!"
+                game_ended = True
+            elif self.check_game_over():
+                self.display_message = "No more valid moves! Game Over!"
+                game_ended = True
+        
+        return {
+            'success': success,
+            'error': error_message,
+            'game_ended': game_ended,
+            'state': self.get_api_state()
+        }
+
+if __name__ == "__main__":
+    # Example of running the game in console mode
+    game = Game()
+    game.set_output_mode('console')
+    game.run_game()
