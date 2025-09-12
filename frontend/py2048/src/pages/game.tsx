@@ -94,6 +94,7 @@ interface GameState {
   last_move_score: number;
   message: string;
   hints_remaining: number;
+  available_moves?: string[];
 }
 
 interface GameConfig {
@@ -137,6 +138,7 @@ const convertBackendResponse = (
     last_move_score: lastMoveScore,
     message: message,
     hints_remaining: gameData.resources.hints.remaining,
+    available_moves: gameData.available_moves || [],
   };
 };
 
@@ -155,6 +157,60 @@ export default function Game() {
   // AI Hint Modal state
   const [showHintModal, setShowHintModal] = useState(false);
   const [aiHintMessage, setAiHintMessage] = useState('');
+  const [fullAiHint, setFullAiHint] = useState<{
+    suggestion?: string;
+    reasoning: string;
+    strategy?: string;
+    confidence?: number;
+    alternatives?: string[];
+  } | null>(null);
+  // Separate state for persistent ScoreBoard hint message
+  const [persistentHintMessage, setPersistentHintMessage] = useState<string>('');
+
+  // Function to parse AI response into structured format
+  const parseAiResponse = (response: string) => {
+    const sections = {
+      suggestion: '',
+      reasoning: '',
+      strategy: '',
+    };
+
+    // Extract recommended move
+    const moveMatch = response.match(/\*\*Recommended move:\*\*\s*\*?(UP|DOWN|LEFT|RIGHT|up|down|left|right)\*?/i);
+    if (moveMatch) {
+      sections.suggestion = moveMatch[1].toUpperCase();
+    }
+
+    // Extract reasoning (replace newlines with spaces for easier parsing)
+    const cleanResponse = response.replace(/\n/g, ' ');
+    const reasoningMatch = cleanResponse.match(/\*\*Reasoning:\*\*(.*?)(?=\*\*Strategy:\*\*|$)/i);
+    if (reasoningMatch) {
+      sections.reasoning = reasoningMatch[1].trim();
+    }
+
+    // Extract strategy
+    const strategyMatch = cleanResponse.match(/\*\*Strategy:\*\*(.*?)$/i);
+    if (strategyMatch) {
+      sections.strategy = strategyMatch[1].trim();
+    }
+
+    return sections;
+  };
+
+  // Function to create brief hint message for scoreboard
+  const createBriefHintMessage = (parsed: ReturnType<typeof parseAiResponse>) => {
+    if (parsed.suggestion) {
+      return `💡 AI suggests: ${parsed.suggestion} - Click for details`;
+    }
+    return '💡 AI hint available - Click for details';
+  };
+
+  // Function to handle hint message click (opens modal with full hint)
+  const handleHintMessageClick = () => {
+    if (fullAiHint) {
+      setShowHintModal(true);
+    }
+  };
 
   // Helper functions for centralized messaging
   const showMessage = (text: string, type: 'success' | 'error' | 'info' | 'warning' | 'hint') => {
@@ -185,6 +241,10 @@ export default function Game() {
   const initializeGame = async () => {
     setLoading(true);
     clearMessage();
+    // Clear any existing hint data when starting a new game
+    setPersistentHintMessage('');
+    setFullAiHint(null);
+    setAiHintMessage('');
     
     try {
       let config: GameConfig = {};
@@ -263,6 +323,11 @@ export default function Game() {
       const newGameState = convertBackendResponse(backendResponse, lastMoveScore);
       setGameState(newGameState);
       
+      // Clear hint data when board state changes after a successful move
+      setPersistentHintMessage('');
+      setFullAiHint(null);
+      setAiHintMessage('');
+      
       // Show success message for good moves
       if (lastMoveScore > 0) {
         showSuccess(`Great move! +${lastMoveScore} points`);
@@ -278,9 +343,16 @@ export default function Game() {
   const getAIHint = async () => {
     if (!gameState || gameState.game_over || loading) return;
     
+    // If there's already a hint available, just show the modal with existing data
+    if (fullAiHint && persistentHintMessage) {
+      setShowHintModal(true);
+      return;
+    }
+    
     setLoading(true);
     setShowHintModal(true); // Open the modal
     setAiHintMessage(''); // Clear previous hint
+    setFullAiHint(null); // Clear previous structured hint
     
     try {
       const response = await fetch(`${API_BASE_URL}/hint`, {
@@ -298,7 +370,25 @@ export default function Game() {
 
       const newGameState = convertBackendResponse(backendResponse);
       setGameState(newGameState);
-      setAiHintMessage(newGameState.message);
+      
+      // Parse the AI response for better formatting
+      const parsedHint = parseAiResponse(newGameState.message);
+      setFullAiHint({
+        suggestion: parsedHint.suggestion,
+        reasoning: parsedHint.reasoning,
+        strategy: parsedHint.strategy,
+        confidence: 0.8, // Default confidence
+        alternatives: newGameState.available_moves?.filter((move: string) => move !== parsedHint.suggestion.toLowerCase()) || []
+      });
+      
+      // Set brief message for scoreboard (persistent) and full message for modal
+      const briefMessage = createBriefHintMessage(parsedHint);
+      setPersistentHintMessage(briefMessage); // This persists on ScoreBoard
+      setAiHintMessage(newGameState.message); // Full message for modal
+      
+      // Show temporary bubble message
+      showMessage(briefMessage, 'hint');
+      
     } catch (err) {
       console.error('Error getting AI hint:', err);
       showError('Failed to get AI hint. Please try again.');
@@ -428,7 +518,8 @@ export default function Game() {
               hintsRemaining={gameState.hints_remaining}
               canRedo={gameState.can_redo}
               lastMoveScore={gameState.last_move_score}
-              gameMessage={gameState.message}
+              gameMessage={persistentHintMessage}
+              onHintMessageClick={handleHintMessageClick}
             />
 
             {/* Game Board */}
@@ -535,6 +626,7 @@ export default function Game() {
               isOpen={showHintModal}
               isLoading={loading}
               hintMessage={aiHintMessage}
+              fullHint={fullAiHint}
               onClose={() => setShowHintModal(false)}
               onRequestHint={getAIHint}
               disabled={gameState.game_over || gameState.hints_remaining <= 0}

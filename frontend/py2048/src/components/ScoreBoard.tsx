@@ -9,6 +9,7 @@ interface ScoreBoardProps {
   canRedo: boolean;
   lastMoveScore: number;
   gameMessage?: string;
+  onHintMessageClick?: () => void;
 }
 
 const ScoreBoard: React.FC<ScoreBoardProps> = ({
@@ -19,7 +20,8 @@ const ScoreBoard: React.FC<ScoreBoardProps> = ({
   hintsRemaining,
   canRedo,
   lastMoveScore,
-  gameMessage
+  gameMessage,
+  onHintMessageClick
 }) => {
   return (
     <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
@@ -67,9 +69,18 @@ const ScoreBoard: React.FC<ScoreBoardProps> = ({
       {/* Game Message */}
       {gameMessage && (
         <div className="text-center mt-2">
-          <span className="text-blue-600 text-sm">
-            {gameMessage}
-          </span>
+          {gameMessage.includes('💡') && onHintMessageClick ? (
+            <button
+              onClick={onHintMessageClick}
+              className="text-blue-600 text-sm hover:text-blue-800 hover:underline cursor-pointer transition-colors"
+            >
+              {gameMessage}
+            </button>
+          ) : (
+            <span className="text-blue-600 text-sm">
+              {gameMessage}
+            </span>
+          )}
         </div>
       )}
     </div>

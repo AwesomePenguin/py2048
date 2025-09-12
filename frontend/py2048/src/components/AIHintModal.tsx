@@ -5,6 +5,13 @@ interface AIHintModalProps {
   isOpen: boolean;
   isLoading: boolean;
   hintMessage: string;
+  fullHint?: {
+    suggestion?: string;
+    reasoning: string;
+    strategy?: string;
+    confidence?: number;
+    alternatives?: string[];
+  } | null;
   onClose: () => void;
   onRequestHint: () => void;
   disabled?: boolean;
@@ -14,6 +21,7 @@ const AIHintModal: React.FC<AIHintModalProps> = ({
   isOpen,
   isLoading,
   hintMessage,
+  fullHint,
   onClose,
   onRequestHint,
   disabled = false
@@ -39,11 +47,71 @@ const AIHintModal: React.FC<AIHintModalProps> = ({
         </div>
 
         {/* Hint Display Area */}
-        <div className="bg-blue-50 rounded-lg p-4 min-h-[100px]">
+        <div className="bg-blue-50 rounded-lg p-4 min-h-[200px]">
           {isLoading ? (
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
               <span className="text-blue-600">Analyzing your board...</span>
+            </div>
+          ) : fullHint ? (
+            <div className="space-y-4">
+              {/* Suggestion */}
+              {fullHint.suggestion && (
+                <div className="bg-white rounded-lg p-3 border-l-4 border-green-500">
+                  <div className="flex items-center mb-2">
+                    <span className="text-2xl mr-2">🎯</span>
+                    <span className="font-bold text-green-700">Recommended Move</span>
+                  </div>
+                  <p className="text-lg font-semibold text-green-800">{fullHint.suggestion}</p>
+                </div>
+              )}
+
+              {/* Reasoning */}
+              {fullHint.reasoning && (
+                <div className="bg-white rounded-lg p-3 border-l-4 border-blue-500">
+                  <div className="flex items-start mb-2">
+                    <span className="text-xl mr-2">🧠</span>
+                    <span className="font-bold text-blue-700">Analysis</span>
+                  </div>
+                  <p className="text-blue-800 leading-relaxed">{fullHint.reasoning}</p>
+                </div>
+              )}
+
+              {/* Strategy */}
+              {fullHint.strategy && (
+                <div className="bg-white rounded-lg p-3 border-l-4 border-purple-500">
+                  <div className="flex items-start mb-2">
+                    <span className="text-xl mr-2">📋</span>
+                    <span className="font-bold text-purple-700">Strategy</span>
+                  </div>
+                  <p className="text-purple-800 leading-relaxed">{fullHint.strategy}</p>
+                </div>
+              )}
+
+              {/* Alternative Moves */}
+              {fullHint.alternatives && fullHint.alternatives.length > 0 && (
+                <div className="bg-white rounded-lg p-3 border-l-4 border-orange-500">
+                  <div className="flex items-center mb-2">
+                    <span className="text-xl mr-2">🔄</span>
+                    <span className="font-bold text-orange-700">Alternative Moves</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {fullHint.alternatives.map((move, index) => (
+                      <span key={index} className="px-2 py-1 bg-orange-100 text-orange-800 rounded-md text-sm font-medium">
+                        {move.toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Confidence */}
+              {fullHint.confidence && (
+                <div className="text-center text-sm text-gray-600">
+                  <span>Confidence: </span>
+                  <span className="font-medium">{Math.round(fullHint.confidence * 100)}%</span>
+                </div>
+              )}
             </div>
           ) : hintMessage ? (
             <div>
