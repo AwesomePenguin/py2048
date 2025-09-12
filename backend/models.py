@@ -365,6 +365,34 @@ class AIRequest(BaseModel):
     )
 
 
+class AuthRequest(BaseModel):
+    """Request model for authentication with invitation code"""
+    invitation_code: str = Field(description="Invitation code for authentication", min_length=1)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "invitation_code": "GAME2048"
+            }
+        }
+
+
+class AuthResponse(BaseModel):
+    """Response model for authentication"""
+    success: bool = Field(description="Whether authentication was successful")
+    message: str = Field(description="Response message")
+    authenticated: bool = Field(description="Whether the user is now authenticated")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Authentication successful",
+                "authenticated": True
+            }
+        }
+
+
 class AIResponse(BaseModel):
     """Response model from AI hint system"""
     success: bool = Field(description="Whether the AI request was successful")

@@ -1,14 +1,18 @@
 '''
 FastAPI server that exposes the 2048 game functionality via REST API.
 '''
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
 
 from game import Game
 from models import (CommandResponse, GameResponse, GameConfigurationRequest, 
-                   AIResponse, GameContext)
+                   AIResponse, GameContext, AuthRequest, AuthResponse)
+
+load_dotenv()  # Load environment variables from .env file
 
 class Server:
     """Encapsulates the FastAPI server and game instance."""
@@ -81,6 +85,28 @@ class Server:
                 raise HTTPException(status_code=400, detail="Game not initialized. Start a new game first.")
             
             return self.game.process_command("redo")
+        
+        @self.app.post("/auth", response_model=AuthResponse)
+        def auth(request: AuthRequest):
+            """Simple authentication with invitation code validation"""
+            # Default invitation code if env variable is not set
+            valid_invit_code = os.getenv("INVIT_CODE")
+            if not valid_invit_code:
+                raise HTTPException(status_code=500, detail="Server misconfiguration: INVIT_CODE not set.")
+            
+            # Case-insensitive comparison
+            if request.invitation_code.strip().upper() == valid_invit_code.upper():
+                return AuthResponse(
+                    success=True,
+                    message="Authentication successful! Welcome to py2048.",
+                    authenticated=True
+                )
+            else:
+                return AuthResponse(
+                    success=False,
+                    message="Invalid invitation code. Please try again.",
+                    authenticated=False
+                )            
 
 def create_server():
     """Factory function to create a server instance."""

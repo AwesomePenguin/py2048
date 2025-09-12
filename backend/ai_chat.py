@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from openai import OpenAI  # Use sync client instead
 from models import AIResponse, GameContext
 
-load_dotenv(".env.local")
+load_dotenv()
 
 class AIChat:
     def __init__(self):

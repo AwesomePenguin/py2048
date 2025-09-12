@@ -7,21 +7,36 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // TODO: This should be fetched from backend in a real implementation
-  const VALID_INVITATION_CODE = 'GAME2048';
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simple validation - in production, this would be validated against backend
-    if (invitationCode.trim().toUpperCase() === VALID_INVITATION_CODE) {
-      // Store auth state in sessionStorage (non-persistent as requested)
-      sessionStorage.setItem('py2048_authenticated', 'true');
-      router.push('/game-select');
-    } else {
-      setError('Invalid invitation code. Please try again.');
+    try {
+      // Call backend API for authentication
+      const response = await fetch('http://127.0.0.1:8000/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          invitation_code: invitationCode.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.authenticated) {
+        // Store auth state in sessionStorage (non-persistent as requested)
+        sessionStorage.setItem('py2048_authenticated', 'true');
+        sessionStorage.setItem('py2048_auth_message', data.message);
+        router.push('/game-select');
+      } else {
+        setError(data.message || 'Authentication failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Auth API error:', error);
+      setError('Unable to connect to server. Please check if the backend is running.');
     }
     
     setIsLoading(false);
@@ -68,7 +83,7 @@ export default function Auth() {
         </form>
 
         <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Hint: Try "GAME2048" (case-insensitive)</p>
+          <p>Need help? Contact your administrator for an invitation code.</p>
         </div>
       </div>
     </div>
