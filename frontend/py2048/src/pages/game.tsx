@@ -1,0 +1,596 @@
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import Board from '../components/Board';
+import Button from '../components/Button';
+
+// Backend response structure matching the Pydantic models
+interface BackendGameResponse {
+  success: boolean;
+  data: {
+    game_state: {
+      board: number[][];
+      score: number;
+      streak: number;
+      moves: number;
+      status: {
+        game_over: boolean;
+        game_won: boolean;
+        in_progress: boolean;
+      };
+    };
+    config: any;
+    resources: {
+      hints: {
+        used: number;
+        remaining: number;
+        total: number;
+      };
+      redos: {
+        used: number;
+        remaining: number;
+        total: number;
+      };
+    };
+    move_history: any[];
+    hint_history: any[];
+    message: string;
+    last_updated: string;
+    difficulty_assessment: string | null;
+    available_moves: string[] | null;
+    board_analysis: any;
+  };
+  message: string;
+  timestamp: string;
+}
+
+interface BackendCommandResponse {
+  success: boolean;
+  command: string;
+  game_data: {
+    game_state: {
+      board: number[][];
+      score: number;
+      streak: number;
+      moves: number;
+      status: {
+        game_over: boolean;
+        game_won: boolean;
+        in_progress: boolean;
+      };
+    };
+    resources: {
+      hints: {
+        used: number;
+        remaining: number;
+        total: number;
+      };
+      redos: {
+        used: number;
+        remaining: number;
+        total: number;
+      };
+    };
+    message: string;
+    [key: string]: any;
+  };
+  game_ended: boolean;
+  error_message: string | null;
+  timestamp: string;
+}
+
+// Frontend-friendly game state interface
+interface GameState {
+  board: number[][];
+  score: number;
+  high_score: number;
+  moves: number;
+  game_over: boolean;
+  win: boolean;
+  can_redo: boolean;
+  streak_count: number;
+  last_move_score: number;
+  message: string;
+  hints_remaining: number;
+}
+
+interface GameConfig {
+  board_size?: [number, number];
+  win_target?: number;
+  merge_strategy?: 'standard' | 'reverse';
+  streak_enabled?: boolean;
+  streak_multiplier?: number;
+  redo_limit?: number;
+}
+
+const API_BASE_URL = 'http://localhost:8000';
+
+// Helper function to convert backend response to frontend game state
+const convertBackendResponse = (
+  backendResponse: BackendGameResponse | BackendCommandResponse,
+  lastMoveScore: number = 0
+): GameState => {
+  let gameData;
+  let message = '';
+  
+  if ('data' in backendResponse) {
+    // GameResponse format
+    gameData = backendResponse.data;
+    message = backendResponse.message || backendResponse.data.message || '';
+  } else {
+    // CommandResponse format
+    gameData = backendResponse.game_data;
+    message = gameData.message || '';
+  }
+
+  return {
+    board: gameData.game_state.board,
+    score: gameData.game_state.score,
+    high_score: gameData.game_state.score, // Backend doesn't track high score separately yet
+    moves: gameData.game_state.moves,
+    game_over: gameData.game_state.status.game_over,
+    win: gameData.game_state.status.game_won,
+    can_redo: gameData.resources.redos.remaining > 0,
+    streak_count: gameData.game_state.streak,
+    last_move_score: lastMoveScore,
+    message: message,
+    hints_remaining: gameData.resources.hints.remaining,
+  };
+};
+
+export default function Game() {
+  const router = useRouter();
+  const { mode } = router.query;
+  
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{
+    text: string;
+    type: 'success' | 'error' | 'info' | 'warning' | 'hint';
+    timestamp: number;
+  } | null>(null);
+
+  // Helper functions for centralized messaging
+  const showMessage = (text: string, type: 'success' | 'error' | 'info' | 'warning' | 'hint') => {
+    setMessage({ text, type, timestamp: Date.now() });
+    
+    // Auto-clear non-error messages after 5 seconds
+    if (type !== 'error') {
+      setTimeout(() => {
+        setMessage(prev => prev?.timestamp === Date.now() ? null : prev);
+      }, 5000);
+    }
+  };
+
+  const clearMessage = () => setMessage(null);
+
+  const showError = (text: string) => showMessage(text, 'error');
+  const showSuccess = (text: string) => showMessage(text, 'success');
+  const showInfo = (text: string) => showMessage(text, 'info');
+  const showHint = (text: string) => showMessage(text, 'hint');
+
+  useEffect(() => {
+    // Check authentication
+    const isAuthenticated = sessionStorage.getItem('py2048_authenticated');
+    if (!isAuthenticated) {
+      router.push('/auth');
+      return;
+    }
+
+    // Initialize game when component mounts and mode is available
+    if (mode) {
+      initializeGame();
+    }
+  }, [router, mode]);
+
+  const initializeGame = async () => {
+    setLoading(true);
+    clearMessage();
+    
+    try {
+      let config: GameConfig = {};
+      
+      if (mode === 'custom') {
+        const storedConfig = sessionStorage.getItem('py2048_custom_config');
+        if (storedConfig) {
+          config = JSON.parse(storedConfig);
+        }
+      }
+      // For standard mode, we use empty config (backend defaults)
+
+      const response = await fetch(`${API_BASE_URL}/new-game`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to start game: ${response.statusText}`);
+      }
+
+      const backendResponse: BackendGameResponse = await response.json();
+      if (!backendResponse.success) {
+        throw new Error('Backend returned unsuccessful response');
+      }
+      
+      const gameState = convertBackendResponse(backendResponse);
+      setGameState(gameState);
+      showSuccess('Game started successfully!');
+    } catch (err) {
+      console.error('Error initializing game:', err);
+      showError('Failed to start the game. Please check if the backend server is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const makeMove = async (direction: 'up' | 'down' | 'left' | 'right') => {
+    if (!gameState || gameState.game_over || loading) return;
+    
+    setLoading(true);
+    clearMessage();
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/move/${direction}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Move failed: ${response.statusText}`);
+      }
+
+      const backendResponse: BackendCommandResponse = await response.json();
+      if (!backendResponse.success) {
+        const errorMessage = backendResponse.error_message || 'Move failed';
+        
+        // Handle invalid move errors gracefully
+        if (errorMessage.toLowerCase().includes('invalid move') || 
+            errorMessage.toLowerCase().includes('no tiles can move')) {
+          showInfo(`No tiles can move ${direction.toUpperCase()}. Try a different direction!`);
+          return; // Don't treat as fatal error, just show message
+        }
+        
+        // Other errors are still treated as fatal
+        throw new Error(errorMessage);
+      }
+      
+      // Calculate points earned this move (difference in scores)
+      const oldScore = gameState.score;
+      const newScore = backendResponse.game_data.game_state.score;
+      const lastMoveScore = newScore - oldScore;
+      
+      const newGameState = convertBackendResponse(backendResponse, lastMoveScore);
+      setGameState(newGameState);
+      
+      // Show success message for good moves
+      if (lastMoveScore > 0) {
+        showSuccess(`Great move! +${lastMoveScore} points`);
+      }
+    } catch (err) {
+      console.error('Error making move:', err);
+      showError('Failed to make move. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAIHint = async () => {
+    if (!gameState || gameState.game_over || loading) return;
+    
+    setLoading(true);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/hint`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Hint request failed: ${response.statusText}`);
+      }
+
+      const backendResponse: BackendCommandResponse = await response.json();
+      if (!backendResponse.success) {
+        throw new Error(backendResponse.error_message || 'Failed to get hint');
+      }
+
+      const newGameState = convertBackendResponse(backendResponse);
+      setGameState(newGameState);
+      showHint(newGameState.message);
+    } catch (err) {
+      console.error('Error getting AI hint:', err);
+      showError('Failed to get AI hint. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const undoMove = async () => {
+    if (!gameState || !gameState.can_redo || loading) return;
+    
+    setLoading(true);
+    clearMessage();
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/redo`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Undo failed: ${response.statusText}`);
+      }
+
+      const backendResponse: BackendCommandResponse = await response.json();
+      if (!backendResponse.success) {
+        throw new Error(backendResponse.error_message || 'Undo failed');
+      }
+
+      const newGameState = convertBackendResponse(backendResponse);
+      setGameState(newGameState);
+      showSuccess('Move undone successfully!');
+    } catch (err) {
+      console.error('Error undoing move:', err);
+      showError('Failed to undo move. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const restartGame = () => {
+    initializeGame();
+  };
+
+  const goBack = () => {
+    router.push('/game-select');
+  };
+
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (loading) return;
+      
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          e.preventDefault();
+          makeMove('up');
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          e.preventDefault();
+          makeMove('down');
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          e.preventDefault();
+          makeMove('left');
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          e.preventDefault();
+          makeMove('right');
+          break;
+        case 'h':
+        case 'H':
+          e.preventDefault();
+          getAIHint();
+          break;
+        case 'u':
+        case 'U':
+          e.preventDefault();
+          undoMove();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [loading, gameState]);
+
+  if (loading && !gameState) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Starting your game...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">py2048</h1>
+          <p className="text-gray-600 capitalize">{mode} Mode</p>
+        </div>
+
+        {/* Centralized Message Display */}
+        {message && (
+          <div className={`mb-4 px-4 py-3 rounded border ${
+            message.type === 'error' ? 'bg-red-100 border-red-400 text-red-700' :
+            message.type === 'success' ? 'bg-green-100 border-green-400 text-green-700' :
+            message.type === 'hint' ? 'bg-blue-100 border-blue-400 text-blue-700' :
+            message.type === 'warning' ? 'bg-yellow-100 border-yellow-400 text-yellow-700' :
+            'bg-gray-100 border-gray-400 text-gray-700'
+          }`}>
+            <div className="flex justify-between items-start">
+              <span className="flex-1">{message.text}</span>
+              <button 
+                onClick={clearMessage}
+                className="ml-2 text-current hover:opacity-70"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
+        {gameState ? (
+          <>
+            {/* Score Display */}
+            <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div>
+                  <p className="text-sm text-gray-600">Score</p>
+                  <p className="text-xl font-bold">{gameState.score.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Best</p>
+                  <p className="text-xl font-bold">{gameState.high_score.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Moves</p>
+                  <p className="text-xl font-bold">{gameState.moves}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Streak</p>
+                  <p className="text-xl font-bold">{gameState.streak_count}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 mt-4 text-center">
+                <div>
+                  <p className="text-xs text-gray-500">Hints Remaining</p>
+                  <p className="text-lg font-medium text-blue-600">{gameState.hints_remaining}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Undo Available</p>
+                  <p className="text-lg font-medium text-green-600">{gameState.can_redo ? 'Yes' : 'No'}</p>
+                </div>
+              </div>
+              
+              {gameState.last_move_score > 0 && (
+                <div className="text-center mt-2">
+                  <span className="text-green-600 font-medium">
+                    +{gameState.last_move_score} points last move!
+                  </span>
+                </div>
+              )}
+              
+              {gameState.message && (
+                <div className="text-center mt-2">
+                  <span className="text-blue-600 text-sm">
+                    {gameState.message}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Game Board */}
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <Board 
+                board={gameState.board} 
+                loading={loading}
+                onMove={makeMove}
+              />
+            </div>
+
+            {/* Game Status */}
+            {(gameState.win || gameState.game_over) && (
+              <div className="bg-white rounded-lg shadow-lg p-6 mb-6 text-center">
+                {gameState.win && (
+                  <div className="text-green-600 mb-2">
+                    <h2 className="text-2xl font-bold">🎉 You Win!</h2>
+                    <p>Congratulations! You've reached the target!</p>
+                  </div>
+                )}
+                {gameState.game_over && (
+                  <div className="text-red-600 mb-2">
+                    <h2 className="text-2xl font-bold">Game Over</h2>
+                    <p>No more moves available!</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Controls */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <Button 
+                  onClick={() => makeMove('up')} 
+                  disabled={loading || gameState.game_over}
+                  variant="move"
+                >
+                  ↑ Up (W)
+                </Button>
+                <Button 
+                  onClick={() => makeMove('down')} 
+                  disabled={loading || gameState.game_over}
+                  variant="move"
+                >
+                  ↓ Down (S)
+                </Button>
+                <Button 
+                  onClick={() => makeMove('left')} 
+                  disabled={loading || gameState.game_over}
+                  variant="move"
+                >
+                  ← Left (A)
+                </Button>
+                <Button 
+                  onClick={() => makeMove('right')} 
+                  disabled={loading || gameState.game_over}
+                  variant="move"
+                >
+                  → Right (D)
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Button 
+                  onClick={getAIHint} 
+                  disabled={loading || gameState.game_over || gameState.hints_remaining <= 0}
+                  variant="secondary"
+                >
+                  💡 AI Hint (H) {gameState.hints_remaining > 0 ? `(${gameState.hints_remaining})` : '(0)'}
+                </Button>
+                <Button 
+                  onClick={undoMove} 
+                  disabled={loading || !gameState.can_redo || gameState.game_over}
+                  variant="secondary"
+                >
+                  ↶ Undo (U)
+                </Button>
+                <Button 
+                  onClick={restartGame} 
+                  disabled={loading}
+                  variant="secondary"
+                >
+                  🔄 Restart
+                </Button>
+              </div>
+              
+              <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
+                <Button 
+                  onClick={goBack}
+                  variant="ghost"
+                >
+                  ← Back to Menu
+                </Button>
+                
+                <div className="text-sm text-gray-500 text-right">
+                  <p>Use arrow keys or WASD to move</p>
+                  <p>Press H for hints, U to undo</p>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-600 mb-4">Failed to load the game.</p>
+            <Button onClick={initializeGame}>
+              Try Again
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
