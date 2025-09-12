@@ -1,3 +1,5 @@
+// Reusable Modal component with backdrop, header, and content area
+
 import React from 'react';
 
 interface ModalProps {

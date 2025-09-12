@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Board from '../components/Board';
 import Button from '../components/Button';
+import MessageBubble from '../components/MessageBubble';
+import ScoreBoard from '../components/ScoreBoard';
+import AIHintModal from '../components/AIHintModal';
 
 // Backend response structure matching the Pydantic models
 interface BackendGameResponse {
@@ -148,17 +151,14 @@ export default function Game() {
     type: 'success' | 'error' | 'info' | 'warning' | 'hint';
     timestamp: number;
   } | null>(null);
+  
+  // AI Hint Modal state
+  const [showHintModal, setShowHintModal] = useState(false);
+  const [aiHintMessage, setAiHintMessage] = useState('');
 
   // Helper functions for centralized messaging
   const showMessage = (text: string, type: 'success' | 'error' | 'info' | 'warning' | 'hint') => {
     setMessage({ text, type, timestamp: Date.now() });
-    
-    // Auto-clear non-error messages after 5 seconds
-    if (type !== 'error') {
-      setTimeout(() => {
-        setMessage(prev => prev?.timestamp === Date.now() ? null : prev);
-      }, 5000);
-    }
   };
 
   const clearMessage = () => setMessage(null);
@@ -279,6 +279,8 @@ export default function Game() {
     if (!gameState || gameState.game_over || loading) return;
     
     setLoading(true);
+    setShowHintModal(true); // Open the modal
+    setAiHintMessage(''); // Clear previous hint
     
     try {
       const response = await fetch(`${API_BASE_URL}/hint`, {
@@ -296,10 +298,11 @@ export default function Game() {
 
       const newGameState = convertBackendResponse(backendResponse);
       setGameState(newGameState);
-      showHint(newGameState.message);
+      setAiHintMessage(newGameState.message);
     } catch (err) {
       console.error('Error getting AI hint:', err);
       showError('Failed to get AI hint. Please try again.');
+      setShowHintModal(false); // Close modal on error
     } finally {
       setLoading(false);
     }
@@ -412,76 +415,21 @@ export default function Game() {
         </div>
 
         {/* Centralized Message Display */}
-        {message && (
-          <div className={`mb-4 px-4 py-3 rounded border ${
-            message.type === 'error' ? 'bg-red-100 border-red-400 text-red-700' :
-            message.type === 'success' ? 'bg-green-100 border-green-400 text-green-700' :
-            message.type === 'hint' ? 'bg-blue-100 border-blue-400 text-blue-700' :
-            message.type === 'warning' ? 'bg-yellow-100 border-yellow-400 text-yellow-700' :
-            'bg-gray-100 border-gray-400 text-gray-700'
-          }`}>
-            <div className="flex justify-between items-start">
-              <span className="flex-1">{message.text}</span>
-              <button 
-                onClick={clearMessage}
-                className="ml-2 text-current hover:opacity-70"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        )}
+        <MessageBubble message={message} onDismiss={clearMessage} />
 
         {gameState ? (
           <>
-            {/* Score Display */}
-            <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div>
-                  <p className="text-sm text-gray-600">Score</p>
-                  <p className="text-xl font-bold">{gameState.score.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Best</p>
-                  <p className="text-xl font-bold">{gameState.high_score.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Moves</p>
-                  <p className="text-xl font-bold">{gameState.moves}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Streak</p>
-                  <p className="text-xl font-bold">{gameState.streak_count}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4 mt-4 text-center">
-                <div>
-                  <p className="text-xs text-gray-500">Hints Remaining</p>
-                  <p className="text-lg font-medium text-blue-600">{gameState.hints_remaining}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Undo Available</p>
-                  <p className="text-lg font-medium text-green-600">{gameState.can_redo ? 'Yes' : 'No'}</p>
-                </div>
-              </div>
-              
-              {gameState.last_move_score > 0 && (
-                <div className="text-center mt-2">
-                  <span className="text-green-600 font-medium">
-                    +{gameState.last_move_score} points last move!
-                  </span>
-                </div>
-              )}
-              
-              {gameState.message && (
-                <div className="text-center mt-2">
-                  <span className="text-blue-600 text-sm">
-                    {gameState.message}
-                  </span>
-                </div>
-              )}
-            </div>
+            {/* Score Display - Now using ScoreBoard component */}
+            <ScoreBoard
+              score={gameState.score}
+              highScore={gameState.high_score}
+              moves={gameState.moves}
+              streakCount={gameState.streak_count}
+              hintsRemaining={gameState.hints_remaining}
+              canRedo={gameState.can_redo}
+              lastMoveScore={gameState.last_move_score}
+              gameMessage={gameState.message}
+            />
 
             {/* Game Board */}
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -581,6 +529,16 @@ export default function Game() {
                 </div>
               </div>
             </div>
+
+            {/* AI Hint Modal */}
+            <AIHintModal
+              isOpen={showHintModal}
+              isLoading={loading}
+              hintMessage={aiHintMessage}
+              onClose={() => setShowHintModal(false)}
+              onRequestHint={getAIHint}
+              disabled={gameState.game_over || gameState.hints_remaining <= 0}
+            />
           </>
         ) : (
           <div className="text-center py-12">

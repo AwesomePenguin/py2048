@@ -1,11 +1,14 @@
+// Component to render individual tile with dynamic styling based on its value
+
 import React from 'react';
 
 interface TileProps {
   value: number;
   size?: number;
+  style?: React.CSSProperties;
 }
 
-const Tile: React.FC<TileProps> = ({ value, size = 80 }) => {
+const Tile: React.FC<TileProps> = ({ value, size = 80, style = {} }) => {
   // Get tile color based on value
   const getTileStyle = (value: number) => {
     if (value === 0) {
@@ -45,23 +48,24 @@ const Tile: React.FC<TileProps> = ({ value, size = 80 }) => {
     };
   };
 
-  const style = getTileStyle(value);
+  const tileStyle = getTileStyle(value);
   
   return (
     <div
       className={`
         flex items-center justify-center rounded-md font-bold
         transition-all duration-150 ease-in-out
-        ${style.fontSize}
+        ${tileStyle.fontSize}
         ${value !== 0 ? 'shadow-md' : ''}
       `}
       style={{
-        backgroundColor: style.backgroundColor,
-        color: style.color,
+        backgroundColor: tileStyle.backgroundColor,
+        color: tileStyle.color,
         width: `${size}px`,
         height: `${size}px`,
         minWidth: `${size}px`,
         minHeight: `${size}px`,
+        ...style, // Merge in any additional styles from props
       }}
     >
       {value !== 0 && (

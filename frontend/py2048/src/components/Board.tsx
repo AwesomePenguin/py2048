@@ -1,3 +1,5 @@
+// Component to render the game board and handle user interactions
+
 import React from 'react';
 import Tile from './Tile';
 
@@ -8,7 +10,8 @@ interface BoardProps {
 }
 
 const Board: React.FC<BoardProps> = ({ board, loading = false, onMove }) => {
-  const boardSize = board.length;
+  const boardRows = board.length;
+  const boardCols = board[0]?.length || 0;
   
   // Handle touch/swipe gestures for mobile
   const [touchStart, setTouchStart] = React.useState<{ x: number; y: number } | null>(null);
@@ -57,7 +60,7 @@ const Board: React.FC<BoardProps> = ({ board, loading = false, onMove }) => {
     }
   };
 
-  // Dynamic grid sizing based on board size
+  // Dynamic grid sizing based on board dimensions
   const getGridSize = () => {
     if (typeof window !== 'undefined') {
       const baseSize = Math.min(400, window.innerWidth * 0.8);
@@ -67,7 +70,7 @@ const Board: React.FC<BoardProps> = ({ board, loading = false, onMove }) => {
   };
 
   const gridSize = getGridSize();
-  const cellSize = Math.min(90, (gridSize - 60) / boardSize);
+  const cellSize = Math.min(90, (gridSize - 60) / Math.max(boardRows, boardCols));
 
   const gridClass = `grid gap-2 p-4 bg-gray-300 rounded-lg relative`;
   
@@ -76,9 +79,10 @@ const Board: React.FC<BoardProps> = ({ board, loading = false, onMove }) => {
       <div 
         className={gridClass}
         style={{ 
-          gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,
+          gridTemplateColumns: `repeat(${boardCols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${boardRows}, minmax(0, 1fr))`,
           width: `${gridSize}px`,
-          height: `${gridSize}px`,
+          height: `${gridSize * (boardRows / boardCols)}px`,
         }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -91,13 +95,17 @@ const Board: React.FC<BoardProps> = ({ board, loading = false, onMove }) => {
           </div>
         )}
         
-        {/* Render tiles */}
+        {/* Render tiles with explicit grid positioning */}
         {board.map((row, rowIndex) => 
           row.map((value, colIndex) => (
             <Tile 
               key={`${rowIndex}-${colIndex}`} 
               value={value}
               size={cellSize}
+              style={{
+                gridRow: rowIndex + 1,
+                gridColumn: colIndex + 1
+              }}
             />
           ))
         )}
