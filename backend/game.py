@@ -7,8 +7,10 @@ import random
 from typing import Optional
 from datetime import datetime
 import json
+from ai_chat import AIChat
 from models import (GameContext, GameState, GameStatus, GameConfiguration, 
-                   GameResources, ResourceUsage, GameResponse, CommandResponse)
+                   GameResources, ResourceUsage, GameResponse, CommandResponse, 
+                   MoveHistoryEntry, AIHintHistory)
 
 class Game:
     def __init__(self, config: Optional[dict] = None, test_mode: bool = False):
@@ -158,7 +160,8 @@ class Game:
             'over': self.state['over'],
             'won': self.state['won'],
             'display_message': self.state['display_message'],
-            'moves_count': self.state['moves_count']
+            'moves_count': self.state['moves_count'],
+            'move_history': copy.deepcopy(self.state['move_history'])  # Deep copy of move history
         }
     
     def restore_state(self, saved_state):
@@ -173,6 +176,7 @@ class Game:
         self.state['won'] = saved_state['won']
         self.state['display_message'] = saved_state['display_message']
         self.state['moves_count'] = saved_state['moves_count']
+        self.state['move_history'] = copy.deepcopy(saved_state.get('move_history', []))
     
     def save_state_to_history(self):
         '''
@@ -244,6 +248,7 @@ class Game:
         self.state['won'] = False
         self.state['display_message'] = "Game started!"
         self.state['moves_count'] = 0
+        self.state['move_history'] = []  # Reset move history
         
         # Reset session-persistent counters
         self.hints_used = 0
@@ -251,6 +256,7 @@ class Game:
         
         # Clear history
         self.history = []
+        self.hint_history = []  # Reset hint history
         
         # Add initial tiles
         for _ in range(self.initial_tiles):
@@ -477,8 +483,8 @@ class Game:
             game_state=game_state,
             config=config,
             resources=resources,
-            move_history=[],  # TODO: Implement move history tracking
-            hint_history=[],  # TODO: Implement hint history tracking
+            move_history=self.move_history,  # Use actual move history
+            hint_history=self.hint_history,  # Use actual hint history
             message=self.display_message,
             last_updated=datetime.now(),
             available_moves=available_moves
@@ -638,17 +644,51 @@ class Game:
     
     def handle_hint(self):
         '''
-        Method to handle hint action
+        Method to handle hint action with AI integration
         '''
         # Check if hints are available
         if self.hints_used >= self.number_of_hints:
             self.display_message = "No hints left!"
             return False
         
-        # Placeholder for hint logic - to be implemented
-        self.hints_used += 1
-        self.display_message = f"Hint used! Hints left: {self.number_of_hints - self.hints_used}"
-        return True
+        try:
+            # Generate hint using AI system
+            chat = AIChat()
+            context = self.get_ai_context()
+            ai_response = chat.chat(context)
+            
+            if ai_response.success:
+                # Create hint history entry
+                hint_entry = AIHintHistory(
+                    hint_number=self.hints_used + 1,
+                    requested_at=datetime.now(),
+                    board_state_when_requested=copy.deepcopy(self.board),
+                    hint_direction=ai_response.suggestion,
+                    hint_reasoning=ai_response.reasoning,
+                    was_followed=None,  # Will be updated when player makes next move
+                    outcome_if_followed=None
+                )
+                self.hint_history.append(hint_entry)
+                
+                # Update counters and display message
+                self.hints_used += 1
+                hint_message = f"AI Hint ({self.number_of_hints - self.hints_used} left): {ai_response.reasoning}"
+                if ai_response.suggestion:
+                    hint_message = f"Suggested move: {ai_response.suggestion.upper()}. {ai_response.reasoning}"
+                
+                self.display_message = hint_message
+                return True
+            else:
+                # AI failed, provide fallback
+                self.hints_used += 1
+                self.display_message = f"Hint service unavailable. Hints left: {self.number_of_hints - self.hints_used}"
+                return True
+                
+        except Exception as e:
+            # Fallback for any errors
+            self.hints_used += 1
+            self.display_message = f"Hint error occurred. Hints left: {self.number_of_hints - self.hints_used}"
+            return True
 
     def handle_move(self, direction: str):
         '''
@@ -672,7 +712,18 @@ class Game:
         # Valid move occurred - apply all changes
         self.moves_count += 1
         self.score += points_earned
-        self.move_history.append(direction)
+        
+        # Create move history entry
+        move_entry = MoveHistoryEntry(
+            move_number=self.moves_count,
+            direction=direction,
+            points_earned=points_earned,
+            merge_occurred=merge_occurred,
+            streak_after_move=self.streak,
+            board_state=copy.deepcopy(self.board),
+            timestamp=datetime.now()
+        )
+        self.move_history.append(move_entry)
         
         # Handle streak system
         if self.use_streak:

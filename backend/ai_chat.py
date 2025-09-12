@@ -4,11 +4,11 @@ Connect to remote AI services via OpenAI-compatible API.
 For our coding exercise, we will use Qwen hosted on Alibaba Cloud.
 '''
 import os
-import requests
 from datetime import datetime
 from typing import Dict
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import OpenAI  # Use sync client instead
+from models import AIResponse, GameContext
 
 load_dotenv(".env.local")
 
@@ -21,7 +21,7 @@ class AIChat:
         self._check_variables()
 
         # Initialize OpenAI-compatible client
-        self.client = AsyncOpenAI(
+        self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
         )
@@ -32,13 +32,13 @@ class AIChat:
         if not self.default_model:
             raise ValueError("Default model is not set in environment variables.")
 
-    async def health_check(self) -> Dict[str, any]:
+    def health_check(self) -> Dict[str, any]:
         '''
         Check the health of the AI service.
         '''
         try:
             # Simple API test
-            test_response = await self.client.chat.completions.create(
+            test_response = self.client.chat.completions.create(
                 model=self.default_model,
                 messages=[{"role": "user", "content": "Hello"}],
                 max_tokens=10
@@ -59,4 +59,62 @@ class AIChat:
                 "timestamp": datetime.utcnow().isoformat()
             }
         
-    async def chat(self, context)
+    def chat(self, context: GameContext) -> AIResponse:
+        '''
+        Send game context to AI and get a response.
+        '''
+        try:
+            system_prompt = (
+                "You are an expert 2048 game assistant. Analyze the game state and provide a helpful hint. "
+                "Your response should include:\n"
+                "1. A recommended move direction (up/down/left/right)\n"
+                "2. Brief reasoning for the recommendation\n"
+                "3. General strategy advice\n"
+                "Keep your response concise and actionable."
+            )
+            
+            # Create a concise context summary
+            board_str = "\n".join([" ".join(f"{cell:4}" for cell in row) for row in context.game_state.board])
+            context_summary = (
+                f"Current board:\n{board_str}\n"
+                f"Score: {context.game_state.score}, Moves: {context.game_state.moves}\n"
+                f"Available moves: {context.available_moves}\n"
+                f"Win target: {context.config.win_target}"
+            )
+            
+            response = self.client.chat.completions.create(
+                model=self.default_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": context_summary}
+                ],
+                max_tokens=200,
+                temperature=0.3  # Low temperature for focused responses
+            )
+            
+            ai_content = response.choices[0].message.content.strip()
+            
+            # Simple parsing to extract move suggestion (look for direction words)
+            suggested_move = None
+            directions = ['up', 'down', 'left', 'right']
+            for direction in directions:
+                if direction.lower() in ai_content.lower():
+                    suggested_move = direction
+                    break
+            
+            return AIResponse(
+                success=True,
+                suggestion=suggested_move,
+                reasoning=ai_content,
+                confidence=0.8,  # Default confidence
+                error_message=None
+            )
+            
+        except Exception as e:
+            return AIResponse(
+                success=False,
+                suggestion=None,
+                reasoning=f"AI service unavailable: {str(e)}",
+                confidence=0.0,
+                error_message=str(e)
+            )
