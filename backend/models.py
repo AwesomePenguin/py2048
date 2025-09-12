@@ -304,12 +304,12 @@ class AIRequest(BaseModel):
 class AIResponse(BaseModel):
     """Response model from AI hint system"""
     success: bool = Field(description="Whether the AI request was successful")
-    suggestion: Optional[str] = Field(description="Suggested move direction")
+    suggestion: Optional[str] = Field(default=None, description="Suggested move direction")
     reasoning: str = Field(description="AI's reasoning and analysis")
     confidence: float = Field(ge=0.0, le=1.0, description="Confidence in suggestion (0-1)")
-    alternative_moves: Optional[List[str]] = Field(description="Alternative move suggestions")
-    strategic_advice: Optional[str] = Field(description="General strategic advice")
-    difficulty_assessment: Optional[str] = Field(description="Assessment of current situation")
+    alternative_moves: Optional[List[str]] = Field(default=None, description="Alternative move suggestions")
+    strategic_advice: Optional[str] = Field(default=None, description="General strategic advice")
+    difficulty_assessment: Optional[str] = Field(default=None, description="Assessment of current situation")
     error_message: Optional[str] = Field(default=None, description="Error message if request failed")
     
     class Config:

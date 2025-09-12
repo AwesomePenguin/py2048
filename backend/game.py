@@ -688,6 +688,7 @@ class Game:
             # Fallback for any errors
             self.hints_used += 1
             self.display_message = f"Hint error occurred. Hints left: {self.number_of_hints - self.hints_used}"
+            print(f"Hint error: {e}")
             return True
 
     def handle_move(self, direction: str):
