@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game import Game
+from models import CommandResponse, GameContext
 
 
 class TestGameIntegration(unittest.TestCase):
@@ -241,10 +242,15 @@ class TestCommandProcessing(unittest.TestCase):
         # Process move command
         result = self.game.process_command('left')
         
-        self.assertTrue(result['success'])
-        self.assertIsNone(result['error'])
-        self.assertFalse(result['game_ended'])
-        self.assertIn('state', result)
+        # Verify return type is CommandResponse
+        self.assertIsInstance(result, CommandResponse)
+        
+        # Test the response structure
+        self.assertTrue(result.success)
+        self.assertIsNone(result.error_message)
+        self.assertFalse(result.game_ended)
+        self.assertEqual(result.command, 'left')
+        self.assertIsInstance(result.game_data, GameContext)
         
         # Verify game state was updated
         self.assertEqual(self.game.moves_count, 1)
@@ -262,9 +268,10 @@ class TestCommandProcessing(unittest.TestCase):
         
         result = self.game.process_command('left')
         
-        self.assertFalse(result['success'])
-        self.assertIsNotNone(result['error'])
-        self.assertIn('state', result)
+        self.assertIsInstance(result, CommandResponse)
+        self.assertFalse(result.success)
+        self.assertIsNotNone(result.error_message)
+        self.assertIsInstance(result.game_data, GameContext)
     
     def test_process_command_redo(self):
         """Test processing redo commands via API"""
@@ -275,16 +282,20 @@ class TestCommandProcessing(unittest.TestCase):
         # Now test redo
         result = self.game.process_command('redo')
         
-        self.assertTrue(result['success'])
-        self.assertIsNone(result['error'])
+        self.assertIsInstance(result, CommandResponse)
+        self.assertTrue(result.success)
+        self.assertIsNone(result.error_message)
+        self.assertEqual(result.command, 'redo')
         self.assertEqual(self.game.redos_used, 1)
     
     def test_process_command_hint(self):
         """Test processing hint commands via API"""
         result = self.game.process_command('hint')
         
-        self.assertTrue(result['success'])
-        self.assertIsNone(result['error'])
+        self.assertIsInstance(result, CommandResponse)
+        self.assertTrue(result.success)
+        self.assertIsNone(result.error_message)
+        self.assertEqual(result.command, 'hint')
         self.assertEqual(self.game.hints_used, 1)
     
     def test_process_command_restart(self):
@@ -295,8 +306,10 @@ class TestCommandProcessing(unittest.TestCase):
         
         result = self.game.process_command('restart')
         
-        self.assertTrue(result['success'])
-        self.assertIsNone(result['error'])
+        self.assertIsInstance(result, CommandResponse)
+        self.assertTrue(result.success)
+        self.assertIsNone(result.error_message)
+        self.assertEqual(result.command, 'restart')
         
         # Verify game was restarted
         self.assertEqual(self.game.score, 0)
@@ -306,9 +319,12 @@ class TestCommandProcessing(unittest.TestCase):
         """Test processing invalid commands"""
         result = self.game.process_command('invalid_command')
         
-        self.assertFalse(result['success'])
-        self.assertEqual(result['error'], 'Invalid command')
-        self.assertIn('valid_commands', result)
+        self.assertIsInstance(result, CommandResponse)
+        self.assertFalse(result.success)
+        self.assertEqual(result.command, 'invalid_command')
+        self.assertIn('Invalid command', result.error_message)
+        # The GameContext should still be provided even for invalid commands
+        self.assertIsInstance(result.game_data, GameContext)
     
     def test_process_command_win_detection(self):
         """Test that command processing detects win conditions"""
@@ -317,8 +333,10 @@ class TestCommandProcessing(unittest.TestCase):
         
         result = self.game.process_command('left')
         
-        self.assertTrue(result['success'])
-        self.assertTrue(result['game_ended'])
+        self.assertIsInstance(result, CommandResponse)
+        self.assertTrue(result.success)
+        self.assertTrue(result.game_ended)
+        self.assertEqual(result.command, 'left')
         self.assertIn('Congratulations', self.game.display_message)
     
     def test_process_command_game_over_detection(self):
@@ -333,12 +351,14 @@ class TestCommandProcessing(unittest.TestCase):
         
         # Make a move that results in a full board with no merges
         result = self.game.process_command('right')
-        print(result)
+        
+        self.assertIsInstance(result, CommandResponse)
+        self.assertEqual(result.command, 'right')
         
         # The result depends on whether this actually creates a game over state
         # Let's check if game over was detected
         if self.game.check_game_over():
-            self.assertTrue(result['game_ended'])
+            self.assertTrue(result.game_ended)
             self.assertIn('Game Over', self.game.display_message)
 
 

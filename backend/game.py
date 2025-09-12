@@ -5,7 +5,10 @@ Core module for the 2048 game logic
 import copy
 import random
 from typing import Optional
+from datetime import datetime
 import json
+from models import (GameContext, GameState, GameStatus, GameConfiguration, 
+                   GameResources, ResourceUsage, GameResponse, CommandResponse)
 
 class Game:
     def __init__(self, config: Optional[dict] = None, test_mode: bool = False):
@@ -61,7 +64,8 @@ class Game:
             'over': False,
             'won': False,
             'display_message': "",
-            'moves_count': 0
+            'moves_count': 0,
+            'move_history': [],  # List to track move history
         }
         
         # Session-persistent counters (not part of state that gets saved/restored)
@@ -70,6 +74,9 @@ class Game:
         
         # History to store previous states (list of state dictionaries)
         self.history = []
+
+        # History of hints
+        self.hint_history = []
 
         # Initialize the game
         self.init_game()
@@ -130,6 +137,14 @@ class Game:
     @moves_count.setter
     def moves_count(self, value):
         self.state['moves_count'] = value
+
+    @property
+    def move_history(self):
+        return self.state['move_history']
+    
+    @move_history.setter
+    def move_history(self, value):
+        self.state['move_history'] = value
 
     def get_state_copy(self):
         '''
@@ -392,6 +407,156 @@ class Game:
             'last_updated': __import__('datetime').datetime.now().isoformat()
         }
     
+    def get_ai_context(self) -> GameContext:
+        '''
+        Get complete game context for AI system integration
+        Returns standardized Pydantic model with all game state and history
+        '''
+        # Create game status
+        status = GameStatus(
+            game_over=self.over,
+            game_won=self.won,
+            in_progress=not (self.over or self.won)
+        )
+        
+        # Create current game state
+        game_state = GameState(
+            board=copy.deepcopy(self.board),
+            score=self.score,
+            streak=self.streak,
+            moves=self.moves_count,
+            status=status
+        )
+        
+        # Create game configuration
+        config = GameConfiguration(
+            board_size=(self.size_x, self.size_y),
+            win_target=self.win_value,
+            initial_tiles=self.initial_tiles,
+            random_new_tiles=self.random_new_tiles,
+            new_tile_values=self.new_tile_values,
+            streak_enabled=self.use_streak,
+            streak_multiplier=self.state['streak_multiplier'],
+            streak_bonus_percent=self.streak_bonus_percent,
+            merge_strategy=self.merge_strategy,
+            allow_secondary_merge=self.allow_secondary_merge,
+            max_redo=self.max_redo,
+            number_of_hints=self.number_of_hints
+        )
+        
+        # Create resource usage tracking
+        hints_remaining = max(0, self.number_of_hints - self.hints_used)
+        redos_remaining = max(0, self.max_redo - self.redos_used) if self.max_redo != -1 else -1
+        
+        resources = GameResources(
+            hints=ResourceUsage(
+                used=self.hints_used,
+                remaining=hints_remaining,
+                total=self.number_of_hints
+            ),
+            redos=ResourceUsage(
+                used=self.redos_used,
+                remaining=redos_remaining,
+                total=self.max_redo
+            )
+        )
+        
+        # Determine available moves
+        available_moves = []
+        for direction in ['up', 'down', 'left', 'right']:
+            # Test move without changing state
+            original_board = [row[:] for row in self.board]
+            test_points, test_merged = self._execute_move(direction)
+            if self.board != original_board:
+                available_moves.append(direction)
+            # Restore original board after test
+            self.board = original_board
+        
+        # Create complete context
+        context = GameContext(
+            game_state=game_state,
+            config=config,
+            resources=resources,
+            move_history=[],  # TODO: Implement move history tracking
+            hint_history=[],  # TODO: Implement hint history tracking
+            message=self.display_message,
+            last_updated=datetime.now(),
+            available_moves=available_moves
+        )
+        
+        return context
+    
+    def process_command(self, command: str) -> CommandResponse:
+        """
+        Process a command and return standardized Pydantic response for frontend API
+        """
+        if command not in self.valid_commands:
+            return CommandResponse(
+                success=False,
+                command=command,
+                game_data=self.get_ai_context(),
+                game_ended=False,
+                error_message=f"Invalid command. Valid commands: {', '.join(self.valid_commands)}",
+                timestamp=datetime.now()
+            )
+        
+        success = True
+        error_message = None
+        
+        try:
+            if command == 'redo':
+                success = self.handle_redo()
+                if not success:
+                    error_message = self.display_message
+            elif command == 'hint':
+                success = self.handle_hint()
+                if not success:
+                    error_message = self.display_message
+            elif command in ['up', 'down', 'left', 'right']:
+                success = self.handle_move(command)
+                if not success:
+                    error_message = self.display_message
+            elif command == 'restart':
+                self.init_game()
+                success = True
+            else:
+                success = False
+                error_message = f"Command '{command}' not implemented"
+                
+        except Exception as e:
+            success = False
+            error_message = str(e)
+        
+        # Check for game end conditions after processing command
+        game_ended = False
+        if command in ['up', 'down', 'left', 'right']:
+            if self.check_win():
+                self.display_message = "Congratulations! You've reached the target tile!"
+                game_ended = True
+            elif self.check_game_over():
+                self.display_message = "No more valid moves! Game Over!"
+                game_ended = True
+        
+        return CommandResponse(
+            success=success,
+            command=command,
+            game_data=self.get_ai_context(),
+            game_ended=game_ended,
+            error_message=error_message,
+            timestamp=datetime.now()
+        )
+    
+    def get_frontend_response(self, message: str = "") -> GameResponse:
+        """
+        Get a standardized response for frontend using Pydantic models
+        """
+        return GameResponse(
+            success=True,
+            data=self.get_ai_context(),
+            message=message or self.display_message,
+            timestamp=datetime.now()
+        )
+    
     def set_output_mode(self, mode: str):
         '''
         Change the output mode (console/web)
@@ -492,7 +657,7 @@ class Game:
         if direction not in ['up', 'down', 'left', 'right']:
             self.display_message = "Invalid direction!"
             return False
-        
+
         # Store original board to check if move was valid
         original_board = [row[:] for row in self.board]
         
@@ -507,6 +672,7 @@ class Game:
         # Valid move occurred - apply all changes
         self.moves_count += 1
         self.score += points_earned
+        self.move_history.append(direction)
         
         # Handle streak system
         if self.use_streak:
@@ -771,64 +937,6 @@ class Game:
             else:
                 # For web mode, break the loop as this should be handled by API calls
                 break
-
-    def process_command(self, command: str) -> dict:
-        """
-        Process a command and return the result for web API use
-        This method is designed for stateless web API calls
-        """
-        if command not in self.valid_commands:
-            return {
-                'success': False,
-                'error': 'Invalid command',
-                'valid_commands': self.valid_commands,
-                'state': self.get_api_state()
-            }
-        
-        success = True
-        error_message = None
-        
-        try:
-            if command == 'redo':
-                success = self.handle_redo()
-                if not success:
-                    error_message = self.display_message
-            elif command == 'hint':
-                success = self.handle_hint()
-                if not success:
-                    error_message = self.display_message
-            elif command in ['up', 'down', 'left', 'right']:
-                success = self.handle_move(command)
-                if not success:
-                    error_message = self.display_message
-            elif command == 'restart':
-                self.init_game()
-                success = True
-            else:
-                success = False
-                error_message = f"Command '{command}' not implemented for web mode"
-                
-        except Exception as e:
-            success = False
-            error_message = str(e)
-        
-        # Check for game end conditions after processing command
-        game_ended = False
-        if command in ['up', 'down', 'left', 'right']:
-            # Check game end conditions after any move attempt (successful or not)
-            if self.check_win():
-                self.display_message = "Congratulations! You've reached the target tile!"
-                game_ended = True
-            elif self.check_game_over():
-                self.display_message = "No more valid moves! Game Over!"
-                game_ended = True
-        
-        return {
-            'success': success,
-            'error': error_message,
-            'game_ended': game_ended,
-            'state': self.get_api_state()
-        }
 
 if __name__ == "__main__":
     # Example of running the game in console mode
