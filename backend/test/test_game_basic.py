@@ -11,6 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game import Game
+from models import TestGameConfigurationRequest, GameConfigurationRequest
 
 
 class TestGameBasic(unittest.TestCase):
@@ -19,9 +20,11 @@ class TestGameBasic(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         # Create a basic game instance for testing
-        self.game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)  # No random tiles for predictable testing
-    
-    def test_default_initialization(self):
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0
+        )
+        self.game = Game(config, test_mode=True)  # No random tiles for predictable testing    def test_default_initialization(self):
         """Test that game initializes with default values correctly"""
         game = Game()
         
@@ -40,21 +43,19 @@ class TestGameBasic(unittest.TestCase):
     
     def test_custom_configuration(self):
         """Test that custom configuration values are applied correctly"""
-        config = {
-            'size_x': 5,
-            'size_y': 6,
-            'win_value': 1024,
-            'initial_tiles': 1,
-            'random_new_tiles': 1,
-            'new_tile_values': [2],
-            'max_redo': 5,
-            'merge_strategy': 'reverse',
-            'allow_secondary_merge': True,
-            'use_streak': True,
-            'streak_bonus_percent': 15,
-            'number_of_hints': 2,
-            'output_mode': 'web'
-        }
+        config = GameConfigurationRequest(
+            board_size=(5, 6),
+            win_target=1024,
+            initial_tiles=1,
+            random_new_tiles=1,
+            new_tile_values=[2],
+            max_redo=5,
+            merge_strategy='reverse',
+            allow_secondary_merge=True,
+            streak_enabled=True,
+            streak_bonus_percent=15,
+            number_of_hints=2
+        )
         
         game = Game(config, test_mode=True)
         
@@ -68,19 +69,23 @@ class TestGameBasic(unittest.TestCase):
         self.assertTrue(game.use_streak)
         self.assertEqual(game.streak_bonus_percent, 15)
         self.assertEqual(game.number_of_hints, 2)
-        self.assertEqual(game.output_mode, 'web')
     
     def test_board_initialization(self):
         """Test that the board is initialized correctly"""
         # Test with no initial tiles
-        game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(initial_tiles=0, random_new_tiles=0)
+        game = Game(config, test_mode=True)
         
         # Board should be empty (all zeros)
         expected_board = [[0, 0, 0, 0] for _ in range(4)]
         self.assertEqual(game.board, expected_board)
         
         # Test with custom board size
-        config = {'size_x': 3, 'size_y': 5, 'initial_tiles': 0, 'random_new_tiles': 0}
+        config = TestGameConfigurationRequest(
+            board_size=(3, 5), 
+            initial_tiles=0, 
+            random_new_tiles=0
+        )
         game = Game(config, test_mode=True)
         expected_board = [[0, 0, 0] for _ in range(5)]
         self.assertEqual(game.board, expected_board)
@@ -199,24 +204,23 @@ class TestGameValidation(unittest.TestCase):
     def test_valid_configurations(self):
         """Test that valid configurations pass validation"""
         valid_configs = [
-            {'size_x': 3, 'size_y': 3},  # Minimum size
-            {'size_x': 12, 'size_y': 12},  # Maximum size
-            {'size_x': 4, 'size_y': 5},  # Rectangular board
-            {'win_value': 4, 'new_tile_values': [2]},  # Minimum win value, must also have new_tile_values smaller than win_value
-            {'win_value': 10000},  # Maximum win value
-            {'initial_tiles': 1, 'size_x': 3, 'size_y': 3},  # Minimum initial tiles
-            {'new_tile_values': [1]},  # Minimum tile value
-            {'new_tile_values': [10]},  # Maximum tile value
-            {'max_redo': 0},  # Disabled redo
-            {'max_redo': -1},  # Unlimited redo
-            {'number_of_hints': 0},  # No hints
-            {'number_of_hints': 5},  # Maximum hints
-            {'use_streak': True, 'streak_bonus_percent': 0},  # Minimum streak bonus
-            {'use_streak': True, 'streak_bonus_percent': 100},  # Maximum streak bonus
+            GameConfigurationRequest(board_size=(3, 3)),  # Minimum size
+            GameConfigurationRequest(board_size=(12, 12)),  # Maximum size  
+            GameConfigurationRequest(board_size=(4, 5)),  # Rectangular board
+            GameConfigurationRequest(win_target=4, new_tile_values=[2]),  # Minimum win value
+            GameConfigurationRequest(win_target=10000),  # Maximum win value
+            GameConfigurationRequest(initial_tiles=1, board_size=(3, 3)),  # Minimum initial tiles
+            GameConfigurationRequest(new_tile_values=[1]),  # Minimum tile value
+            GameConfigurationRequest(new_tile_values=[10]),  # Maximum tile value
+            GameConfigurationRequest(max_redo=0),  # Disabled redo
+            GameConfigurationRequest(max_redo=-1),  # Unlimited redo
+            GameConfigurationRequest(number_of_hints=0),  # No hints
+            GameConfigurationRequest(number_of_hints=5),  # Maximum hints
+            GameConfigurationRequest(streak_enabled=True, streak_bonus_percent=0),  # Minimum streak bonus
+            GameConfigurationRequest(streak_enabled=True, streak_bonus_percent=100),  # Maximum streak bonus
         ]
         
         for config in valid_configs:
-            config.update({'initial_tiles': 1, 'random_new_tiles': 1})  # Add required fields
             try:
                 game = Game(config, test_mode=False)  # test_mode=False to enable validation checks
                 # If we get here, validation passed
@@ -227,65 +231,59 @@ class TestGameValidation(unittest.TestCase):
     def test_invalid_board_sizes(self):
         """Test that invalid board sizes are rejected"""
         invalid_configs = [
-            {'size_x': 2},  # Too small
-            {'size_y': 2},  # Too small
-            {'size_x': 13},  # Too large
-            {'size_y': 13},  # Too large
-            {'size_x': 2, 'size_y': 4},  # Total cells < 9
+            GameConfigurationRequest(board_size=(2, 4)),  # Too small x
+            GameConfigurationRequest(board_size=(4, 2)),  # Too small y
+            GameConfigurationRequest(board_size=(13, 4)),  # Too large x
+            GameConfigurationRequest(board_size=(4, 13)),  # Too large y
         ]
         
         for config in invalid_configs:
-            config.update({'initial_tiles': 1, 'random_new_tiles': 1})
-            with self.assertRaises(ValueError):
+            with self.assertRaises((ValueError, Exception)):  # Could be validation error from Pydantic or Game
                 Game(config, test_mode=False)  # test_mode=False to enable validation checks
     
     def test_invalid_win_values(self):
         """Test that invalid win values are rejected"""
-        invalid_configs = [
-            {'win_value': 3},  # Too small
-            {'win_value': 10001},  # Too large
-        ]
+        invalid_values = [3, 10001]  # Too small, too large
         
-        for config in invalid_configs:
-            config.update({'initial_tiles': 1, 'random_new_tiles': 1})
-            with self.assertRaises(ValueError):
+        for win_target in invalid_values:
+            with self.assertRaises(Exception):  # Pydantic ValidationError or Game ValueError
+                config = GameConfigurationRequest(win_target=win_target)
                 Game(config, test_mode=False)  # test_mode=False to enable validation checks
     
     def test_invalid_tile_configurations(self):
         """Test that invalid tile configurations are rejected"""
-        invalid_configs = [
-            {'initial_tiles': 0},  # Too few initial tiles (minimum 1)
-            {'size_x': 3, 'size_y': 3, 'initial_tiles': 5},  # Too many initial tiles (max 4 for 3x3)
-            {'new_tile_values': []},  # Empty tile values
-            {'new_tile_values': [0]},  # Invalid tile value (too small)
-            {'new_tile_values': [11]},  # Invalid tile value (too large)
-            {'random_new_tiles': 0},  # Too few new tiles per move
-            {'size_x': 3, 'size_y': 3, 'random_new_tiles': 5},  # Too many new tiles
-            {'win_value': 4, 'new_tile_values': [4]},  # Tile value >= win condition
+        # Test each invalid configuration individually
+        test_cases = [
+            ({"initial_tiles": 0}, "Too few initial tiles"),
+            ({"board_size": (3, 3), "initial_tiles": 5}, "Too many initial tiles"),
+            ({"new_tile_values": []}, "Empty tile values"),
+            ({"new_tile_values": [0]}, "Invalid tile value (too small)"),
+            ({"new_tile_values": [11]}, "Invalid tile value (too large)"),
+            ({"random_new_tiles": 0}, "Too few new tiles per move"),
+            ({"board_size": (3, 3), "random_new_tiles": 5}, "Too many new tiles"),
+            ({"win_target": 4, "new_tile_values": [4]}, "Tile value >= win condition"),
         ]
         
-        for config in invalid_configs:
-            if 'initial_tiles' not in config:
-                config['initial_tiles'] = 1
-            if 'random_new_tiles' not in config:
-                config['random_new_tiles'] = 1
-            with self.assertRaises(ValueError):
-                Game(config, test_mode=False)  # test_mode=False to enable validation checks
+        for config_params, description in test_cases:
+            with self.assertRaises(Exception, msg=f"Should fail for: {description}"):
+                config = GameConfigurationRequest(**config_params)
+                Game(config, test_mode=False)
     
     def test_invalid_game_settings(self):
         """Test that invalid game settings are rejected"""
-        invalid_configs = [
-            {'max_redo': -2},  # Invalid redo setting
-            {'number_of_hints': -1},  # Too few hints
-            {'number_of_hints': 6},  # Too many hints
-            {'use_streak': True, 'streak_bonus_percent': -1},  # Invalid streak bonus
-            {'use_streak': True, 'streak_bonus_percent': 101},  # Invalid streak bonus
+        # Test each invalid setting individually
+        test_cases = [
+            ({"max_redo": -2}, "Invalid redo setting"),
+            ({"number_of_hints": -1}, "Too few hints"),
+            ({"number_of_hints": 6}, "Too many hints"),
+            ({"streak_enabled": True, "streak_bonus_percent": -1}, "Invalid streak bonus"),
+            ({"streak_enabled": True, "streak_bonus_percent": 101}, "Invalid streak bonus"),
         ]
         
-        for config in invalid_configs:
-            config.update({'initial_tiles': 1, 'random_new_tiles': 1})
-            with self.assertRaises(ValueError):
-                Game(config, test_mode=False)  # test_mode=False to enable validation checks
+        for config_params, description in test_cases:
+            with self.assertRaises(Exception, msg=f"Should fail for: {description}"):
+                config = GameConfigurationRequest(**config_params)
+                Game(config, test_mode=False)
 
 
 if __name__ == '__main__':

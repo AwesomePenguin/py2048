@@ -10,7 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game import Game
-from models import CommandResponse, GameContext
+from models import CommandResponse, GameContext, TestGameConfigurationRequest
 
 
 class TestGameIntegration(unittest.TestCase):
@@ -18,14 +18,14 @@ class TestGameIntegration(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'use_streak': True,
-            'streak_bonus_percent': 10,
-            'max_redo': 3
-        }
-        self.game = Game(self.config, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            streak_enabled=True,
+            streak_bonus_percent=10,
+            max_redo=3
+        )
+        self.game = Game(config, test_mode=True)
     
     def set_board(self, board_data):
         """Helper method to set board state"""
@@ -227,12 +227,12 @@ class TestCommandProcessing(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'output_mode': 'web'
-        }
-        self.game = Game(self.config, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0
+        )
+        self.game = Game(config, test_mode=True)
+        self.game.set_output_mode('web')  # Set output mode after initialization
     
     def test_process_command_move(self):
         """Test processing move commands via API"""
@@ -367,7 +367,11 @@ class TestEdgeCases(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0
+        )
+        self.game = Game(config, test_mode=True)
     
     def test_empty_board_operations(self):
         """Test operations on empty board"""
@@ -430,12 +434,11 @@ class TestEdgeCases(unittest.TestCase):
     def test_custom_board_sizes(self):
         """Test game functionality with non-standard board sizes"""
         # Test small board
-        config = {
-            'size_x': 3,
-            'size_y': 3,
-            'initial_tiles': 0,
-            'random_new_tiles': 0
-        }
+        config = TestGameConfigurationRequest(
+            board_size=(3, 3),
+            initial_tiles=0,
+            random_new_tiles=0
+        )
         small_game = Game(config, test_mode=True)
         
         small_game.board[0] = [2, 2, 4]
@@ -445,12 +448,11 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(small_game.board[0], [4, 4, 0])
         
         # Test rectangular board
-        config = {
-            'size_x': 5,
-            'size_y': 3,
-            'initial_tiles': 0,
-            'random_new_tiles': 0
-        }
+        config = TestGameConfigurationRequest(
+            board_size=(5, 3),
+            initial_tiles=0,
+            random_new_tiles=0
+        )
         rect_game = Game(config, test_mode=True)
         
         rect_game.board[0] = [2, 2, 4, 4, 8]

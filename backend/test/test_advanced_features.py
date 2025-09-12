@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game import Game
+from models import TestGameConfigurationRequest
 
 
 class TestStreakSystem(unittest.TestCase):
@@ -17,13 +18,13 @@ class TestStreakSystem(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'use_streak': True,
-            'streak_bonus_percent': 10
-        }
-        self.game = Game(self.config, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            streak_enabled=True,
+            streak_bonus_percent=10
+        )
+        self.game = Game(config, test_mode=True)
     
     def set_board(self, board_data):
         """Helper method to set board state for testing"""
@@ -112,11 +113,11 @@ class TestStreakSystem(unittest.TestCase):
     
     def test_streak_disabled(self):
         """Test that streak system can be disabled"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'use_streak': False
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            streak_enabled=False
+        )
         game = Game(config, test_mode=True)
         
         # Set up board for merge
@@ -133,12 +134,12 @@ class TestStreakSystem(unittest.TestCase):
     
     def test_custom_streak_bonus(self):
         """Test custom streak bonus percentage"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'use_streak': True,
-            'streak_bonus_percent': 25  # 25% bonus instead of 10%
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            streak_enabled=True,
+            streak_bonus_percent=25  # 25% bonus instead of 10%
+        )
         game = Game(config, test_mode=True)
         
         # Set up board for merge
@@ -159,12 +160,12 @@ class TestRedoFunctionality(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'max_redo': 3
-        }
-        self.game = Game(self.config, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            max_redo=3
+        )
+        self.game = Game(config, test_mode=True)
     
     def set_board(self, board_data):
         """Helper method to set board state"""
@@ -227,11 +228,11 @@ class TestRedoFunctionality(unittest.TestCase):
     
     def test_redo_disabled(self):
         """Test redo when disabled (max_redo = 0)"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'max_redo': 0
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            max_redo=0
+        )
         game = Game(config, test_mode=True)
         
         # Set up and make a move
@@ -245,11 +246,11 @@ class TestRedoFunctionality(unittest.TestCase):
     
     def test_redo_unlimited(self):
         """Test unlimited redo (max_redo = -1)"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'max_redo': -1
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            max_redo=-1
+        )
         game = Game(config, test_mode=True)
         
         # Make several moves and redos
@@ -310,12 +311,12 @@ class TestHintSystem(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'number_of_hints': 3
-        }
-        self.game = Game(self.config, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            number_of_hints=3
+        )
+        self.game = Game(config, test_mode=True)
     
     def test_hint_usage(self):
         """Test basic hint usage and counting"""
@@ -341,11 +342,11 @@ class TestHintSystem(unittest.TestCase):
     
     def test_hints_disabled(self):
         """Test when hints are disabled (number_of_hints = 0)"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'number_of_hints': 0
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            number_of_hints=0
+        )
         game = Game(config, test_mode=True)
         
         # Try to use hint - should fail immediately
@@ -359,12 +360,12 @@ class TestRandomTileGeneration(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 1,
-            'new_tile_values': [2]  # Predictable tile value
-        }
-        self.game = Game(self.config, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=1,
+            new_tile_values=[2]  # Predictable tile value
+        )
+        self.game = Game(config, test_mode=True)
     
     def test_add_random_tile_success(self):
         """Test successful random tile addition"""
@@ -391,11 +392,11 @@ class TestRandomTileGeneration(unittest.TestCase):
     
     def test_specific_tile_values(self):
         """Test that tiles are generated with correct values"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 1,
-            'new_tile_values': [4, 8]  # Only 4s and 8s
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=1,
+            new_tile_values=[4, 8]  # Only 4s and 8s
+        )
         game = Game(config, test_mode=True)
         
         # Add several tiles and check their values
@@ -417,7 +418,11 @@ class TestDisplayAndAPI(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0
+        )
+        self.game = Game(config, test_mode=True)
     
     def test_get_display_data(self):
         """Test display data generation"""

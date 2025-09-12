@@ -11,6 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game import Game
+from models import TestGameConfigurationRequest, GameConfigurationRequest
 
 
 class TestMoveLogic(unittest.TestCase):
@@ -19,7 +20,8 @@ class TestMoveLogic(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         # Create game with no random elements for predictable testing
-        self.game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(initial_tiles=0, random_new_tiles=0)
+        self.game = Game(config, test_mode=True)
     
     def set_board(self, board_data):
         """Helper method to set board state for testing"""
@@ -190,11 +192,11 @@ class TestMoveLogic(unittest.TestCase):
     
     def test_secondary_merge_enabled(self):
         """Test secondary merges when allow_secondary_merge is True"""
-        config = {
-            'initial_tiles': 0, 
-            'random_new_tiles': 0,
-            'allow_secondary_merge': True
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0, 
+            random_new_tiles=0,
+            allow_secondary_merge=True
+        )
         game = Game(config, test_mode=True)
         
         # Set board state
@@ -217,11 +219,11 @@ class TestMoveLogic(unittest.TestCase):
     
     def test_reverse_merge_strategy(self):
         """Test reverse merge strategy"""
-        config = {
-            'initial_tiles': 0,
-            'random_new_tiles': 0,
-            'merge_strategy': 'reverse'
-        }
+        config = TestGameConfigurationRequest(
+            initial_tiles=0,
+            random_new_tiles=0,
+            merge_strategy='reverse'
+        )
         game = Game(config, test_mode=True)
         
         # Set board state
@@ -264,7 +266,8 @@ class TestMergeStrategies(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(initial_tiles=0, random_new_tiles=0)
+        self.game = Game(config, test_mode=True)
     
     def test_merge_standard_basic(self):
         """Test standard merge strategy with basic cases"""
@@ -334,7 +337,8 @@ class TestGameEndConditions(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures"""
-        self.game = Game({'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(initial_tiles=0, random_new_tiles=0)
+        self.game = Game(config, test_mode=True)
     
     def test_win_condition_detection(self):
         """Test that win condition is detected correctly"""
@@ -345,7 +349,8 @@ class TestGameEndConditions(unittest.TestCase):
         self.assertTrue(self.game.won)
         
         # Test with custom win value
-        game = Game({'win_value': 1024, 'initial_tiles': 0, 'random_new_tiles': 0}, test_mode=True)
+        config = TestGameConfigurationRequest(win_target=1024, initial_tiles=0, random_new_tiles=0)
+        game = Game(config, test_mode=True)
         game.board[1][1] = 1024
         
         self.assertTrue(game.check_win())

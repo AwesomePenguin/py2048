@@ -10,39 +10,48 @@ import json
 from ai_chat import AIChat
 from models import (GameContext, GameState, GameStatus, GameConfiguration, 
                    GameResources, ResourceUsage, GameResponse, CommandResponse, 
-                   MoveHistoryEntry, AIHintHistory)
+                   MoveHistoryEntry, AIHintHistory, GameConfigurationRequest)
 
 class Game:
-    def __init__(self, config: Optional[dict] = None, test_mode: bool = False):
+    def __init__(self, config: Optional[GameConfigurationRequest] = None, test_mode: bool = False):
         '''
         Initialize the game state
         If no config is provided, use default settings
         '''
         # Initialize config first
-        self.config = config or {}
+        self.pydantic_config = config
         self.test_mode = test_mode  # If true, suppress random elements for testing
 
-        # configurable parameters (set before board initialization)
-        self.size_x = self.config.get('size_x', 4)
-        self.size_y = self.config.get('size_y', 4)
-        self.win_value = self.config.get('win_value', 2048)
-        self.initial_tiles = self.config.get('initial_tiles', random.randint(2, 4)) # number of initial tiles, default random between 2 and 4
-        self.random_new_tiles = self.config.get('random_new_tiles', random.randint(2, 4)) # number of new tiles per move, default random between 2 and 4
-        self.new_tile_values = self.config.get('new_tile_values', [2, 4])
-        self.max_redo = self.config.get('max_redo', 3)  # max number of redo allowed, 0 means no redo, -1 means infinite
-        
-        # advanced settings
-        # merge strategy is one of 'standard', 'reverse'
-        # 'standard': prioritize merging cells away from the direction, i.e. [2,2,2] -> left -> [2,4,0]
-        # 'reverse': prioritize merging cells towards the direction, i.e. [2,2,2] -> left -> [4,2,0]
-        self.merge_strategy = self.config.get('merge_strategy', 'standard')
-        self.allow_secondary_merge = self.config.get('allow_secondary_merge', False) # allow multiple merges in one move, e.g. [2,2,2,2] -> left -> [8,0,0,0]
-        self.use_streak = self.config.get('use_streak', False) # whether to use streak system
-        self.streak_bonus_percent = self.config.get('streak_bonus_percent', 10) # percentage bonus per streak level (default 10%)
-        self.number_of_hints = self.config.get('number_of_hints', 3) # number of AI hint that can be requested per game
+        # Extract configuration values from Pydantic model or use defaults
+        if config:
+            self.size_x, self.size_y = config.board_size if config.board_size else (4, 4)
+            self.win_value = config.win_target if config.win_target else 2048
+            self.initial_tiles = config.initial_tiles if config.initial_tiles is not None else random.randint(2, 4)
+            self.random_new_tiles = config.random_new_tiles if config.random_new_tiles is not None else random.randint(2, 4)
+            self.new_tile_values = config.new_tile_values if config.new_tile_values else [2, 4]
+            self.max_redo = config.max_redo if config.max_redo is not None else 3
+            self.merge_strategy = config.merge_strategy if config.merge_strategy else 'standard'
+            self.allow_secondary_merge = config.allow_secondary_merge if config.allow_secondary_merge is not None else False
+            self.use_streak = config.streak_enabled if config.streak_enabled is not None else False
+            self.streak_bonus_percent = config.streak_bonus_percent if config.streak_bonus_percent is not None else 10
+            self.number_of_hints = config.number_of_hints if config.number_of_hints is not None else 3
+        else:
+            # Default values
+            self.size_x = 4
+            self.size_y = 4
+            self.win_value = 2048
+            self.initial_tiles = random.randint(2, 4)
+            self.random_new_tiles = random.randint(2, 4)
+            self.new_tile_values = [2, 4]
+            self.max_redo = 3
+            self.merge_strategy = 'standard'
+            self.allow_secondary_merge = False
+            self.use_streak = False
+            self.streak_bonus_percent = 10
+            self.number_of_hints = 3
 
         # set output mode: 'console' or 'web'
-        self.output_mode = self.config.get('output_mode', 'console')
+        self.output_mode = 'console'  # Keep this as default for now
 
         # non-configurable parameters
         self.valid_commands = ['up', 'down', 'left', 'right', 'redo', 'hint', 'exit', 'restart']
@@ -687,7 +696,7 @@ class Game:
         except Exception as e:
             # Fallback for any errors
             self.hints_used += 1
-            self.display_message = f"Hint error occurred. Hints left: {self.number_of_hints - self.hints_used}"
+            self.display_message = f"Hint used but an error occurred. Hints left: {self.number_of_hints - self.hints_used}"
             print(f"Hint error: {e}")
             return True
 
