@@ -167,7 +167,7 @@ jobs:
           export GITHUB_USERNAME="${{ github.actor }}"
           
           # Navigate to deployment directory
-          cd ~/py2048
+          cd py2048
           
           # Create .env file from GitHub secrets
           cat > .env << EOF
