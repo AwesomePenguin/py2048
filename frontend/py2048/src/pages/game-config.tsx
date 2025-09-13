@@ -30,7 +30,7 @@ export default function GameConfig() {
     }
   }, [router]);
 
-  const handleConfigChange = (key: keyof GameConfig, value: any) => {
+  const handleConfigChange = (key: keyof GameConfig, value: number | string | boolean) => {
     setConfig(prev => ({
       ...prev,
       [key]: value

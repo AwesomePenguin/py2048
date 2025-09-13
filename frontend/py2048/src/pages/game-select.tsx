@@ -23,7 +23,7 @@ export default function GameSelect() {
       <div className="max-w-2xl w-full bg-white rounded-lg shadow-lg p-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Choose Your Game Mode</h1>
-          <p className="text-gray-600">Select how you'd like to play 2048</p>
+          <p className="text-gray-600">Select how you would like to play 2048</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">

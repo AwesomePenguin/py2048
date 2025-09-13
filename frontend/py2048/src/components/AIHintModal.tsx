@@ -12,9 +12,7 @@ interface AIHintModalProps {
     confidence?: number;
     alternatives?: string[];
   } | null;
-  onClose: () => void;
-  onRequestHint: () => void;
-  disabled?: boolean;
+  onClose: () => void;  
 }
 
 const AIHintModal: React.FC<AIHintModalProps> = ({
@@ -23,15 +21,7 @@ const AIHintModal: React.FC<AIHintModalProps> = ({
   hintMessage,
   fullHint,
   onClose,
-  onRequestHint,
-  disabled = false
 }) => {
-  const handleRequestHint = () => {
-    if (!disabled && !isLoading) {
-      onRequestHint();
-    }
-  };
-
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="AI Assistant">
       <div className="space-y-4">
@@ -123,7 +113,7 @@ const AIHintModal: React.FC<AIHintModalProps> = ({
             </div>
           ) : (
             <div className="text-center text-gray-500">
-              <p>Click "Get AI Hint" to receive strategic advice for your current board position.</p>
+              <p>Click Get AI Hint to receive strategic advice for your current board position.</p>
             </div>
           )}
         </div>

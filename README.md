@@ -1,5 +1,10 @@
 # 2048 Game - Enhanced Edition
 
+[![CI/CD Pipeline](https://github.com/AwesomePenguin/py2048/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/AwesomePenguin/py2048/actions/workflows/ci-cd.yml)
+[![Docker](https://img.shields.io/badge/Docker-Enabled-blue)](https://ghcr.io/awesomepenguin)
+[![Python](https://img.shields.io/badge/Python-3.11+-green)](https://python.org)
+[![Next.js](https://img.shields.io/badge/Next.js-15+-black)](https://nextjs.org)
+
 An advanced implementation of the classic 2048 puzzle game with AI assistance, customizable rules, and modern web interface.
 
 ## 🎮 Game Features
@@ -144,10 +149,29 @@ For detailed technical information, development guidelines, and implementation d
 
 ## 🚀 Deployment
 
-The project includes automated deployment with Docker and GitHub Actions:
-- **Containerized**: Both frontend and backend run in Docker containers
-- **CI/CD Pipeline**: Automated testing, building, and deployment
-- **Production Ready**: Nginx reverse proxy, SSL termination, health monitoring
+The project includes comprehensive deployment automation:
+
+### Automated Deployment
+- **🐳 Docker Containers**: Optimized images for frontend and backend
+- **🔄 GitHub Actions**: Automated CI/CD pipeline with testing and deployment
+- **📦 GHCR**: Container images stored in GitHub Container Registry
+- **🌐 Docker Compose**: Production-ready orchestration with Nginx
+- **🔒 Security**: Health checks, rate limiting, and SSL-ready configuration
+
+### Quick Deploy
+```bash
+# 1. Server setup (one-time)
+curl -sSL https://raw.githubusercontent.com/AwesomePenguin/py2048/main/setup-server.sh | bash
+
+# 2. Configure GitHub repository secrets:
+#    - DASHSCOPE_API_KEY (your AI service API key)
+#    - DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY (server access)
+
+# 3. Automatic deployment
+git push origin main  # Environment and services deployed automatically!
+```
+
+For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## 🤝 Contributing
 

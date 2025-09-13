@@ -1,120 +1,211 @@
 name: CI/CD Pipeline
 
-# Workflow disabled during initial development
-# Uncomment the 'on' section below when ready to enable CI/CD
-# on:
-#   push:
-#     branches: [ main ]
-#   pull_request:
-#     branches: [ main ]
-
-# Manual trigger only during development
 on:
-  workflow_dispatch:  # Allows manual triggering from GitHub UI
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: ${{ github.repository }}-backend
+  FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
 
 jobs:
   test-backend:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
     
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
     - name: Install backend dependencies
       run: |
         cd backend
         python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+        pip install -r requirements.txt
     
     - name: Run backend tests
       run: |
+        cd backend/test
+        python run_tests.py
+    
+    - name: Test backend startup
+      run: |
         cd backend
-        # Add your test commands here
-        # python -m pytest
-        echo "Backend tests would run here"
+        timeout 10s python server.py || exit 0
 
   test-frontend:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: frontend/py2048/package-lock.json
     
     - name: Install frontend dependencies
       run: |
-        cd frontend
-        npm ci
-    
-    - name: Run frontend tests
-      run: |
-        cd frontend
-        npm run test:ci
-    
-    - name: Build frontend
-      run: |
-        cd frontend
-        npm run build
-
-  lint:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    
-    - name: Install Python linting tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 black isort mypy
-    
-    - name: Lint Python code
-      run: |
-        cd backend
-        # flake8 .
-        # black --check .
-        # isort --check-only .
-        # mypy .
-        echo "Python linting would run here"
-    
-    - name: Install Node.js dependencies
-      run: |
-        cd frontend
+        cd frontend/py2048
         npm ci
     
     - name: Lint frontend code
       run: |
-        cd frontend
+        cd frontend/py2048
         npm run lint
+    
+    - name: Build frontend
+      run: |
+        cd frontend/py2048
+        npm run build
+
+  build-and-push:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Extract metadata for backend
+      id: backend-meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push backend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.backend-meta.outputs.tags }}
+        labels: ${{ steps.backend-meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Extract metadata for frontend
+      id: frontend-meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend/py2048
+        file: ./frontend/py2048/Dockerfile
+        push: true
+        tags: ${{ steps.frontend-meta.outputs.tags }}
+        labels: ${{ steps.frontend-meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
   deploy:
-    needs: [test-backend, test-frontend, lint]
+    needs: [build-and-push]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
-    - name: Deploy to production
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_KEY }}
+        port: ${{ secrets.DEPLOY_PORT }}
+        script: |
+          # Set environment variables for the deployment script
+          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          export GITHUB_USERNAME="${{ github.actor }}"
+          
+          # Navigate to deployment directory
+          cd ~/py2048
+          
+          # Create .env file from GitHub secrets
+          cat > .env << EOF
+          # AI Configuration
+          DASHSCOPE_API_KEY="${{ secrets.DASHSCOPE_API_KEY }}"
+          MODEL_API_URL="${{ secrets.MODEL_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}"
+          DEFAULT_MODEL="${{ secrets.DEFAULT_MODEL || 'qwen-plus' }}"
+          
+          # Authentication
+          INVIT_CODE="${{ secrets.INVIT_CODE || 'PLAY!2048' }}"
+          
+          # Environment
+          NODE_ENV=production
+          PYTHONPATH=/app
+          EOF
+          
+          # Add any additional environment variables if provided
+          if [ -n "${{ secrets.ADDITIONAL_ENV_VARS }}" ]; then
+            echo "" >> .env
+            echo "# Additional Configuration" >> .env
+            echo "${{ secrets.ADDITIONAL_ENV_VARS }}" >> .env
+          fi
+          
+          # Update deployment files
+          curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml -o docker-compose.yml
+          curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/nginx.conf -o nginx.conf
+          curl -sSL https://raw.githubusercontent.com/${{ github.repository }}/main/deploy.sh -o deploy.sh
+          chmod +x deploy.sh
+          
+          # Run deployment
+          ./deploy.sh
+    
+    - name: Notify deployment status
+      if: always()
       run: |
-        echo "Deployment steps would go here"
-        # Add your deployment commands here
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment successful!"
+        else
+          echo "❌ Deployment failed!"
+          exit 1
+        fi

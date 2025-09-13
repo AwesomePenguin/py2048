@@ -6,6 +6,49 @@ import MessageBubble from '../components/MessageBubble';
 import ScoreBoard from '../components/ScoreBoard';
 import AIHintModal from '../components/AIHintModal';
 
+// Type definitions for backend responses
+interface FullGameConfig {
+  board_size: [number, number];
+  win_target: number;
+  initial_tiles: number;
+  random_new_tiles: number;
+  merge_strategy: 'standard' | 'reverse';
+  streak_enabled: boolean;
+  streak_multiplier: number;
+  hint_limit: number;
+  redo_limit: number;
+}
+
+interface MoveHistoryEntry {
+  move_number: number;
+  direction: string;
+  score_before: number;
+  score_after: number;
+  points_earned: number;
+  tiles_merged: number;
+  new_tile_position?: [number, number];
+  new_tile_value?: number;
+  timestamp: string;
+}
+
+interface HintHistoryEntry {
+  hint_number: number;
+  request_timestamp: string;
+  ai_response: string;
+  parsed_suggestion: string | null;
+  was_followed: boolean | null;
+  confidence_score?: number;
+}
+
+interface BoardAnalysis {
+  empty_tiles: number;
+  max_tile: number;
+  mergeable_pairs: number;
+  corner_strategy_score: number;
+  monotonicity_score: number;
+  smoothness_score: number;
+}
+
 // Backend response structure matching the Pydantic models
 interface BackendGameResponse {
   success: boolean;
@@ -21,7 +64,7 @@ interface BackendGameResponse {
         in_progress: boolean;
       };
     };
-    config: any;
+    config: FullGameConfig;
     resources: {
       hints: {
         used: number;
@@ -34,13 +77,13 @@ interface BackendGameResponse {
         total: number;
       };
     };
-    move_history: any[];
-    hint_history: any[];
+    move_history: MoveHistoryEntry[];
+    hint_history: HintHistoryEntry[];
     message: string;
     last_updated: string;
     difficulty_assessment: string | null;
     available_moves: string[] | null;
-    board_analysis: any;
+    board_analysis: BoardAnalysis;
   };
   message: string;
   timestamp: string;
@@ -74,7 +117,13 @@ interface BackendCommandResponse {
       };
     };
     message: string;
-    [key: string]: any;
+    config?: FullGameConfig;
+    move_history?: MoveHistoryEntry[];
+    hint_history?: HintHistoryEntry[];
+    available_moves?: string[] | null;
+    board_analysis?: BoardAnalysis;
+    difficulty_assessment?: string | null;
+    last_updated?: string;
   };
   game_ended: boolean;
   error_message: string | null;
@@ -97,12 +146,16 @@ interface GameState {
   available_moves?: string[];
 }
 
-interface GameConfig {
+// Frontend-friendly game config interface for API requests (all fields optional)
+interface GameConfigRequest {
   board_size?: [number, number];
   win_target?: number;
+  initial_tiles?: number;
+  random_new_tiles?: number;
   merge_strategy?: 'standard' | 'reverse';
   streak_enabled?: boolean;
   streak_multiplier?: number;
+  hint_limit?: number;
   redo_limit?: number;
 }
 
@@ -222,7 +275,6 @@ export default function Game() {
   const showError = (text: string) => showMessage(text, 'error');
   const showSuccess = (text: string) => showMessage(text, 'success');
   const showInfo = (text: string) => showMessage(text, 'info');
-  const showHint = (text: string) => showMessage(text, 'hint');
 
   useEffect(() => {
     // Check authentication
@@ -247,12 +299,12 @@ export default function Game() {
     setAiHintMessage('');
     
     try {
-      let config: GameConfig = {};
+      let config: GameConfigRequest = {};
       
       if (mode === 'custom') {
         const storedConfig = sessionStorage.getItem('py2048_custom_config');
         if (storedConfig) {
-          config = JSON.parse(storedConfig);
+          config = JSON.parse(storedConfig) as GameConfigRequest;
         }
       }
       // For standard mode, we use empty config (backend defaults)
@@ -537,7 +589,7 @@ export default function Game() {
                 {gameState.win && (
                   <div className="text-green-600 mb-2">
                     <h2 className="text-2xl font-bold">🎉 You Win!</h2>
-                    <p>Congratulations! You've reached the target!</p>
+                    <p>Congratulations! You have reached the target!</p>
                   </div>
                 )}
                 {gameState.game_over && (
@@ -627,9 +679,7 @@ export default function Game() {
               isLoading={loading}
               hintMessage={aiHintMessage}
               fullHint={fullAiHint}
-              onClose={() => setShowHintModal(false)}
-              onRequestHint={getAIHint}
-              disabled={gameState.game_over || gameState.hints_remaining <= 0}
+              onClose={() => setShowHintModal(false)}              
             />
           </>
         ) : (
