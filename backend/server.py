@@ -117,4 +117,5 @@ if __name__ == "__main__":
     import uvicorn
     
     server = create_server()
-    uvicorn.run(server.app, host="127.0.0.1", port=8000)
+    # Use 0.0.0.0 to accept connections from other Docker containers
+    uvicorn.run(server.app, host="0.0.0.0", port=8000)
