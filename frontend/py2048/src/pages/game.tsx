@@ -159,7 +159,10 @@ interface GameConfigRequest {
   redo_limit?: number;
 }
 
-const API_BASE_URL = 'http://localhost:8000';
+// API URL configuration - works in both development and Docker
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? '/api'  // In production, use Nginx proxy path
+  : 'http://localhost:8000';  // In development, direct to backend
 
 // Helper function to convert backend response to frontend game state
 const convertBackendResponse = (

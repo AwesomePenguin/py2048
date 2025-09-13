@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 
+// API URL configuration - works in both development and Docker
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? '/api'  // In production, use Nginx proxy path
+  : 'http://localhost:8000';  // In development, direct to backend
+
 export default function Auth() {
   const [invitationCode, setInvitationCode] = useState('');
   const [error, setError] = useState('');
@@ -14,7 +19,7 @@ export default function Auth() {
 
     try {
       // Call backend API for authentication
-      const response = await fetch('http://127.0.0.1:8000/auth', {
+      const response = await fetch(`${API_BASE_URL}/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

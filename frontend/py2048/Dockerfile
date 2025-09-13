@@ -19,6 +19,9 @@ RUN npm run build
 # Production image
 FROM node:18-alpine AS runner
 
+# Install wget for health checks
+RUN apk add --no-cache wget
+
 # Set working directory
 WORKDIR /app
 
