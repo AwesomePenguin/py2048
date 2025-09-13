@@ -36,9 +36,6 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Change to deployment directory
-cd $DEPLOY_DIR
-
 # Check if .env file exists
 if [[ ! -f $ENV_FILE ]]; then
     print_error ".env file not found!"
