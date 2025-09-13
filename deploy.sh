@@ -40,16 +40,6 @@ print_error() {
 if [[ ! -f $ENV_FILE ]]; then
     print_error ".env file not found!"
     print_error "This file should have been created automatically by GitHub Actions."
-    print_error "If running manual deployment, please create .env file with required variables:"
-    echo ""
-    echo "Required variables:"
-    echo "  DASHSCOPE_API_KEY=your_api_key_here"
-    echo "  MODEL_API_URL=https://dashscope.aliyuncs.com/compatible-mode/v1"
-    echo "  DEFAULT_MODEL=qwen-plus" 
-    echo "  INVIT_CODE=PLAY!2048"
-    echo "  NODE_ENV=production"
-    echo "  PYTHONPATH=/app"
-    echo ""
     exit 1
 else
     print_success ".env file found and configured"

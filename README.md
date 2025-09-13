@@ -25,15 +25,12 @@ An advanced implementation of the classic 2048 puzzle game with AI assistance, c
 ### Gameplay Modes
 - **Standard Game**: Classic 4x4 board with 2048 target
 - **Custom Game**: Fully configurable parameters for unique challenges
-- **Practice Mode**: Unlimited redos for learning optimal strategies
 
 ## 🎯 Key Highlights
 
 ### Smart AI Integration
 - **Context-aware hints**: AI understands your current board state and game rules
-- **Strategic recommendations**: Get suggestions for optimal next moves
 - **Cost-controlled**: Limited hints per game (3 default, max 5)
-- **Fallback system**: Local hints when AI service is unavailable
 
 ### Flexible Configuration
 - **Board Dimensions**: Any size from 3x3 to 12x12
@@ -44,9 +41,7 @@ An advanced implementation of the classic 2048 puzzle game with AI assistance, c
 
 ### Modern Interface
 - **Responsive Design**: Works on desktop, tablet, and mobile
-- **Smooth Animations**: Fluid tile movements and merge effects
 - **Real-time Updates**: Live score, streak, and statistics tracking
-- **Intuitive Controls**: Keyboard arrows, touch gestures, or on-screen buttons
 
 ## 🚀 Quick Start
 
@@ -71,21 +66,16 @@ npm run dev
 
 Visit `http://localhost:3000` to play!
 
-## 🎮 How to Play
+## 🎮 How to Play (Console Mode)
 
-1. **Start**: Choose standard or custom game mode
-2. **Move**: Use arrow keys or swipe to move tiles
-3. **Merge**: Identical tiles combine when they collide
-4. **Hint**: Ask the AI for strategic advice (limited uses)
-5. **Redo**: Undo moves if enabled in your configuration
-6. **Win**: Reach your target tile value (default: 2048)
-
-### Game Controls
-- **Arrow Keys**: Move tiles in any direction
-- **H**: Request AI hint
-- **U**: Undo last move (if redos available)
-- **R**: Restart game
-- **ESC**: Return to main menu
+### Commands
+- **UP**: move up
+- **DOWN**: move down
+- **LEFT**: move left
+- **RIGHT**: move right
+- **HINT**: request for AI hint (subject to limits)
+- **REDO**: undo the last move
+- **EXIT**: end the game
 
 ## 🏗️ Technical Overview
 
@@ -130,8 +120,8 @@ Run tests to ensure game logic and interface work correctly:
 
 ### Backend Tests
 ```bash
-cd backend
-python -m pytest
+cd backend/test
+python run_tests.py
 ```
 
 ### Frontend Tests
@@ -158,33 +148,9 @@ The project includes comprehensive deployment automation:
 - **🌐 Docker Compose**: Production-ready orchestration with Nginx
 - **🔒 Security**: Health checks, rate limiting, and SSL-ready configuration
 
-### Quick Deploy
-```bash
-# 1. Server setup (one-time)
-curl -sSL https://raw.githubusercontent.com/AwesomePenguin/py2048/main/setup-server.sh | bash
-
-# 2. Configure GitHub repository secrets:
-#    - DASHSCOPE_API_KEY (your AI service API key)
-#    - DEPLOY_HOST, DEPLOY_USER, DEPLOY_KEY (server access)
-
-# 3. Automatic deployment
-git push origin main  # Environment and services deployed automatically!
-```
-
-For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
-
-## 🤝 Contributing
-
-We welcome contributions! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
-
 ## 🎮 Play Online
 
-*[Deployment URL will be added once live]*
+Ask the admin for access
 
 ## 📄 License
 

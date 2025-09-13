@@ -1,14 +1,23 @@
 // Component to render individual tile with dynamic styling based on its value
 
 import React from 'react';
+import { motion } from 'framer-motion';
 
 interface TileProps {
   value: number;
   size?: number;
   style?: React.CSSProperties;
+  isNew?: boolean;
+  isMerged?: boolean;
 }
 
-const Tile: React.FC<TileProps> = ({ value, size = 80, style = {} }) => {
+const Tile: React.FC<TileProps> = ({ 
+  value, 
+  size = 80, 
+  style = {}, 
+  isNew = false, 
+  isMerged = false 
+}) => {
   // Get tile color based on value
   const getTileStyle = (value: number) => {
     if (value === 0) {
@@ -50,11 +59,37 @@ const Tile: React.FC<TileProps> = ({ value, size = 80, style = {} }) => {
 
   const tileStyle = getTileStyle(value);
   
+  // Animation variants for different tile states
+  const tileVariants = {
+    initial: {
+      scale: 0.8,
+      opacity: 0.8,
+    },
+    animate: {
+      scale: 1,
+      opacity: 1,
+    },
+    merged: {
+      scale: [1, 1.1, 1],
+      transition: {
+        duration: 0.2,
+        ease: [0.25, 0.1, 0.25, 1] as const
+      }
+    },
+    new: {
+      scale: [0, 1.1, 1],
+      opacity: [0, 1, 1],
+      transition: {
+        duration: 0.3,
+        ease: [0.68, -0.55, 0.265, 1.55] as const
+      }
+    }
+  };
+
   return (
-    <div
+    <motion.div
       className={`
         flex items-center justify-center rounded-md font-bold
-        transition-all duration-150 ease-in-out
         ${tileStyle.fontSize}
         ${value !== 0 ? 'shadow-md' : ''}
       `}
@@ -67,13 +102,33 @@ const Tile: React.FC<TileProps> = ({ value, size = 80, style = {} }) => {
         minHeight: `${size}px`,
         ...style, // Merge in any additional styles from props
       }}
+      variants={tileVariants}
+      initial="initial"
+      animate={
+        isMerged ? "merged" : 
+        isNew ? "new" : 
+        "animate"
+      }
+      whileHover={value !== 0 ? { 
+        scale: 1.02,
+        transition: { duration: 0.1 }
+      } : undefined}
     >
       {value !== 0 && (
-        <span className="select-none">
+        <motion.span 
+          className="select-none"
+          initial={isNew || isMerged ? { scale: 0 } : { scale: 1 }}
+          animate={{ scale: 1 }}
+          transition={{ 
+            delay: isNew ? 0.1 : 0,
+            duration: 0.2,
+            ease: [0.25, 0.1, 0.25, 1] as const
+          }}
+        >
           {value.toLocaleString()}
-        </span>
+        </motion.span>
       )}
-    </div>
+    </motion.div>
   );
 };
 
